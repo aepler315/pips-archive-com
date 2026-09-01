@@ -1,5 +1,5 @@
 import { parsePuzzle, emptyState, place, remove, flip, canPlace, evaluate, adjacent, key, LEVELS } from './engine.js';
-import { boardSvg, traySvg, tile, pips } from './render.js';
+import { boardSvg, traySvg, tile, pips, paintCells } from './render.js';
 import { getResult, getProgress, saveProgress, clearProgress, recordSolve, fmt } from './store.js';
 
 const qs = new URLSearchParams(location.search);
@@ -39,7 +39,7 @@ const progress = getProgress(date, level);
 if (progress?.state?.length === state.length) { state = progress.state; elapsed = progress.elapsed ?? 0; }
 
 // ---- board ----
-const { svg, cellRects, hitRects, tiles } = boardSvg(puzzle);
+const { svg, cellRects, hitRects, tiles, assigned } = boardSvg(puzzle);
 $('#board').append(svg);
 const trayEl = $('#tray');
 const trayBtns = puzzle.dominoes.map(([a, b], d) => {
@@ -53,11 +53,7 @@ const trayBtns = puzzle.dominoes.map(([a, b], d) => {
 
 function draw() {
   const ev = evaluate(puzzle, state);
-  for (const [k, rect] of cellRects) {
-    const s = ev.regions[puzzle.cells.get(k)];
-    rect.setAttribute('class', 'cell' + (s === 'satisfied' ? ' ok' : s === 'violated' ? ' bad' : '')
-      + (anchor && key(...anchor) === k ? ' anchor' : ''));
-  }
+  paintCells(cellRects, puzzle, assigned, ev.regions, anchor);
   tiles.replaceChildren();
   state.forEach((p, d) => {
     if (!p) return;

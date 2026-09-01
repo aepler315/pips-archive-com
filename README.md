@@ -24,7 +24,7 @@ region's **sum** to `target`), `equals`, `unequal`, `empty` (no constraint).
 
 ## Site
 - `index.html` + `js/archive.js` – month-grouped list of every date with E/M/H chips showing your best time.
-- `play.html` + `js/play.js` + `js/render.js` – the game. Tap a tray domino, tap the cell for its first half, tap a neighbouring cell for the second. Tap a placed domino to select it; tap again to flip, or return it to the tray. Clock runs only while the tab is visible and stops on solve. Unfinished boards are saved and resume on return.
+- `play.html` + `js/play.js` + `js/render.js` – the game. Tap a tray domino, tap the cell for its first half, tap a neighbouring cell for the second. Tap a placed domino to select it; tap again to flip, or return it to the tray. Clock runs only while the tab is visible and stops on solve. Unfinished boards are saved and resume on return. The board is a single rounded polyomino (colored regions, diamond badges at the south-east cell of each constraint) rather than per-cell outlines.
 - `stats.html` + `js/stats.js` – per-level counts, best/median/mean, recent solves, export/import/erase.
 - `js/store.js` – localStorage layer (`pa1:` prefix). Replaying a solved puzzle keeps `first` and updates `best`.
 
