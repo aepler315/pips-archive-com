@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Play — pipsarchive</title>
+<link rel="stylesheet" href="css/site.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="./">pipsarchive<span>.com</span></a>
+    <nav class="nav"><a href="./">Archive</a><a href="stats.html">Stats</a></nav>
+  </header>
+  <h1 id="title">Loading…</h1>
+  <p class="sub" id="sub"></p>
+  <div class="playbar">
+    <div class="levels">
+      <a id="lvl-easy" href="#">Easy</a><a id="lvl-medium" href="#">Medium</a><a id="lvl-hard" href="#">Hard</a>
+    </div>
+    <div class="timer paused" id="timer" aria-live="off">0:00</div>
+  </div>
+  <div class="solved" id="solved" hidden>
+    <div>Solved in <strong>0:00</strong> <span class="detail"></span></div>
+    <button class="btn" id="share">Share</button>
+  </div>
+  <div class="board-wrap"><div id="board"></div></div>
+  <p class="hint" id="hint"></p>
+  <div class="actions" id="board-actions"></div>
+  <div class="tray" id="tray"></div>
+  <div class="actions" style="justify-content:space-between;margin-top:16px">
+    <span class="hint" id="placed"></span>
+    <button class="btn quiet" id="reset">Clear board</button>
+  </div>
+</div>
+<script type="module" src="js/play.js"></script>
+</body>
+</html>

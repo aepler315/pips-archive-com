@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pipsarchive — play any past NYT Pips</title>
+<link rel="stylesheet" href="css/site.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="./">pipsarchive<span>.com</span></a>
+    <nav class="nav"><a href="./" aria-current="page">Archive</a><a href="stats.html">Stats</a></nav>
+  </header>
+  <h1>Every Pips, since the first one</h1>
+  <p class="sub" id="sub">Loading the archive…</p>
+  <div class="toolbar">
+    <a class="btn primary" id="latest" href="#">Latest puzzle</a>
+    <button class="btn" id="random">Random unsolved</button>
+  </div>
+  <div id="list"></div>
+</div>
+<script type="module" src="js/archive.js"></script>
+</body>
+</html>

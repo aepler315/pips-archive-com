@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stats — pipsarchive</title>
+<link rel="stylesheet" href="css/site.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="./">pipsarchive<span>.com</span></a>
+    <nav class="nav"><a href="./">Archive</a><a href="stats.html" aria-current="page">Stats</a></nav>
+  </header>
+  <h1>Your solves</h1>
+  <p class="sub">Stored only in this browser. Export to keep a copy or move it elsewhere.</p>
+  <div class="grid3" id="cards"></div>
+  <table id="table"><thead><tr><th>Level</th><th class="n">Solved</th><th class="n">Best</th><th class="n">Median</th><th class="n">Mean</th></tr></thead><tbody></tbody></table>
+  <h1>Recent</h1>
+  <table id="recent"><thead><tr><th>Date</th><th>Level</th><th class="n">First</th><th class="n">Best</th></tr></thead><tbody></tbody></table>
+  <div class="actions" style="margin-top:24px">
+    <button class="btn" id="export">Export</button>
+    <button class="btn" id="import">Import</button>
+    <button class="btn quiet" id="erase">Erase everything</button>
+    <input type="file" id="file" accept="application/json" hidden>
+  </div>
+</div>
+<script type="module" src="js/stats.js"></script>
+</body>
+</html>

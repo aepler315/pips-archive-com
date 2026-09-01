@@ -1,0 +1,26 @@
+name: Fetch today's puzzle
+on:
+  schedule:
+    - cron: '20 5 * * *'   # 05:20 UTC, after the NYT rollover (midnight ET)
+  workflow_dispatch:
+    inputs:
+      from: { description: 'start date YYYY-MM-DD (optional)', required: false }
+      to:   { description: 'end date YYYY-MM-DD (optional)', required: false }
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: node scripts/fetch.mjs ${{ inputs.from }} ${{ inputs.to }}
+      - run: node --test 'test/*.test.mjs'
+      - name: Commit
+        run: |
+          git config user.name  'pipsarchive-bot'
+          git config user.email 'bot@pipsarchive.com'
+          git add data
+          git diff --cached --quiet || git commit -m "puzzle data $(date -u +%F)"
+          git push

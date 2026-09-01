@@ -1,0 +1,12 @@
+{
+  "name": "pipsarchive",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "fetch": "node scripts/fetch.mjs",
+    "backfill": "node scripts/fetch.mjs --all",
+    "index": "node scripts/build-index.mjs",
+    "test": "node --test 'test/*.test.mjs'",
+    "serve": "python3 -m http.server 8000"
+  }
+}
