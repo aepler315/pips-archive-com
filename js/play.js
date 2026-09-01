@@ -119,18 +119,17 @@ const currentElapsed = () => elapsed + (tickStart === null ? 0 : performance.now
 function startClock() { if (tickStart === null && !solvedFlag) { tickStart = performance.now(); timerEl.classList.remove('paused'); } }
 function stopClock() { if (tickStart !== null) { elapsed += performance.now() - tickStart; tickStart = null; timerEl.classList.add('paused'); } }
 setInterval(() => { timerEl.textContent = fmt(currentElapsed()); }, 250);
-timerEl.textContent = fmt(elapsed);
-const started = () => state.some(Boolean);
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { stopClock(); persist(); } else if (started()) startClock();
+  if (document.hidden) { stopClock(); persist(); } else startClock();
 });
 addEventListener('pagehide', () => { stopClock(); persist(); });
-if (started()) startClock();
+startClock();
+timerEl.textContent = fmt(currentElapsed());
 
 // ---- solve / reset ----
 function onSolved() {
+  const ms = Math.round(currentElapsed());
   stopClock(); solvedFlag = true; sel = null; anchor = null;
-  const ms = Math.round(elapsed);
   const res = recordSolve(date, level, ms);
   const box = $('#solved');
   box.hidden = false;
@@ -146,7 +145,7 @@ $('#share').addEventListener('click', async () => {
 $('#reset').addEventListener('click', () => {
   if (!confirm('Clear the board and restart the clock?')) return;
   stopClock(); state = emptyState(puzzle); elapsed = 0; solvedFlag = false; sel = null; anchor = null;
-  clearProgress(date, level); $('#solved').hidden = true; timerEl.textContent = fmt(0); draw();
+  clearProgress(date, level); $('#solved').hidden = true; timerEl.textContent = fmt(0); startClock(); draw();
 });
 
 if (getResult(date, level) && !progress) {
