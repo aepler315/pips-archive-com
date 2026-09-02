@@ -11,7 +11,11 @@ const el = (tag, attrs = {}, ...children) => {
   return n;
 };
 
-// Pip layouts in a unit square (0..1), for values 0-6.
+const BOARD = {
+  inset: 0.09, radius: 0.26, stroke: 0.058, innerStroke: 0.044,
+  dash: '0.22 0.13', innerDash: '0.16 0.11', dividerPad: 0.14,
+};
+
 const PIPS = {
   0: [], 1: [[.5, .5]], 2: [[.28, .28], [.72, .72]], 3: [[.28, .28], [.5, .5], [.72, .72]],
   4: [[.28, .28], [.72, .28], [.28, .72], [.72, .72]],
@@ -25,18 +29,17 @@ export function pips(x, y, v, cls = 'pip') {
   return g;
 }
 
-// Domino tile spanning unit cells c1 -> c2 (adjacent); pips a at c1, b at c2.
 export function tile(c1, c2, a, b, cls = 'tile') {
   const [r1, col1] = c1, [r2, col2] = c2;
-  const inset = .08;
+  const inset = .14;
   const x = Math.min(col1, col2) + inset, y = Math.min(r1, r2) + inset;
   const w = (col1 === col2 ? 1 : 2) - inset * 2, h = (r1 === r2 ? 1 : 2) - inset * 2;
   const g = el('g');
-  g.append(el('rect', { x, y, width: w, height: h, rx: .16, class: cls }));
+  g.append(el('rect', { x, y, width: w, height: h, rx: .18, class: cls }));
   const mx = (col1 + col2) / 2 + .5, my = (r1 + r2) / 2 + .5;
   g.append(col1 === col2
-    ? el('line', { x1: x + .14, y1: my, x2: x + w - .14, y2: my, class: 'mid' })
-    : el('line', { x1: mx, y1: y + .14, x2: mx, y2: y + h - .14, class: 'mid' }));
+    ? el('line', { x1: x + .12, y1: my, x2: x + w - .12, y2: my, class: 'mid' })
+    : el('line', { x1: mx, y1: y + .12, x2: mx, y2: y + h - .12, class: 'mid' }));
   g.append(pips(col1, r1, a), pips(col2, r2, b));
   return g;
 }
@@ -46,20 +49,20 @@ export const labelText = (reg) => ({
   equals: '=', unequal: '≠', empty: '',
 })[reg.type];
 
-const EMPTY_SWATCH = { id: 'empty', fill: '#F6F1E6', dash: '#C9BBA8', badge: '#8A7D6C' };
+const EMPTY_SWATCH = { id: 'empty', fill: '#F3EBDC', dash: '#C4B49A', badge: '#8A7D6C' };
 const PALETTE = [
-  { id: 'pink',   fill: '#F3B6CE', dash: '#C45A86', badge: '#D63F7A' },
-  { id: 'violet', fill: '#C9B6F2', dash: '#7A58C4', badge: '#6A45C0' },
-  { id: 'blue',   fill: '#B3C6F4', dash: '#4A6BB8', badge: '#3558B0' },
+  { id: 'pink',   fill: '#F6C4D6', dash: '#D24A86', badge: '#DC3A78' },
+  { id: 'violet', fill: '#D0B8EA', dash: '#8A55B8', badge: '#7A38B0' },
+  { id: 'teal',   fill: '#B3D9D3', dash: '#3D8F88', badge: '#1A7A74' },
+  { id: 'peach',  fill: '#F3C4A4', dash: '#D0703C', badge: '#C85A28' },
+  { id: 'slate',  fill: '#B7C2D4', dash: '#5A6A88', badge: '#3A4A68' },
+  { id: 'navy',   fill: '#7B8AAB', dash: '#3A4A70', badge: '#243458' },
   { id: 'mint',   fill: '#B4E0C6', dash: '#3D9A68', badge: '#2B8A55' },
-  { id: 'peach',  fill: '#F4C3A4', dash: '#D0703C', badge: '#C85A28' },
-  { id: 'teal',   fill: '#A6DDD6', dash: '#2E8A82', badge: '#1C7A72' },
   { id: 'lemon',  fill: '#E8DC96', dash: '#B49A28', badge: '#A08818' },
   { id: 'sky',    fill: '#A6D4EE', dash: '#3A86B4', badge: '#2478A8' },
   { id: 'lilac',  fill: '#D8BFE6', dash: '#8A5AA8', badge: '#7A4898' },
   { id: 'coral',  fill: '#F0B0AE', dash: '#C0504E', badge: '#B03C3C' },
   { id: 'sage',   fill: '#C5DCA8', dash: '#6A9440', badge: '#5A8430' },
-  { id: 'navy',   fill: '#A8B4D8', dash: '#4A5A90', badge: '#3A4A80' },
 ];
 
 function regionAdj(puzzle) {
@@ -76,7 +79,6 @@ function regionAdj(puzzle) {
   return adj;
 }
 
-/** Greedy coloring so neighboring constrained regions never share a swatch. */
 export function colorRegions(puzzle) {
   const adj = regionAdj(puzzle);
   const assigned = puzzle.regions.map(() => null);
@@ -127,10 +129,37 @@ function chainLoops(edges) {
   return loops;
 }
 
-function roundedPathFromLoop(loop, radius) {
-  const n = loop.length;
+function loopVerts(loop) { return loop.map((e) => [e.x1, e.y1]); }
+
+function signedArea(verts) {
+  let a = 0;
+  for (let i = 0; i < verts.length; i++) {
+    const [x1, y1] = verts[i], [x2, y2] = verts[(i + 1) % verts.length];
+    a += x1 * y2 - x2 * y1;
+  }
+  return a / 2;
+}
+
+function offsetVerts(verts, inset) {
+  const n = verts.length;
+  if (n < 3 || inset === 0) return verts;
+  const sign = signedArea(verts) >= 0 ? 1 : -1;
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const prev = verts[(i - 1 + n) % n], curr = verts[i], next = verts[(i + 1) % n];
+    const inDx = Math.sign(curr[0] - prev[0]), inDy = Math.sign(curr[1] - prev[1]);
+    const outDx = Math.sign(next[0] - curr[0]), outDy = Math.sign(next[1] - curr[1]);
+    if (inDx === outDx && inDy === outDy) continue;
+    const inNx = -inDy * sign, inNy = inDx * sign;
+    const outNx = -outDy * sign, outNy = outDx * sign;
+    out.push([curr[0] + inset * (inNx + outNx), curr[1] + inset * (inNy + outNy)]);
+  }
+  return out;
+}
+
+function roundedPathFromVerts(verts, radius) {
+  const n = verts.length;
   if (n === 0) return '';
-  const verts = loop.map((e) => [e.x1, e.y1]);
   let d = '';
   for (let i = 0; i < n; i++) {
     const prev = verts[(i - 1 + n) % n], curr = verts[i], next = verts[(i + 1) % n];
@@ -149,45 +178,77 @@ function roundedPathFromLoop(loop, radius) {
   return d + ' Z';
 }
 
-/** Rounded union of a polyomino. Multiple loops cover holes. */
-export function unionPath(cells, radius = 0.18) {
+export function unionPath(cells, radius = 0.18, inset = 0) {
   if (cells.length === 0) return '';
-  return chainLoops(directedEdges(cells)).map((l) => roundedPathFromLoop(l, radius)).join(' ');
+  return chainLoops(directedEdges(cells))
+    .map((l) => roundedPathFromVerts(offsetVerts(loopVerts(l), inset), radius))
+    .join(' ');
 }
 
-export function gridSegs(puzzle) {
+export function regionDividers(cells, inset, endPad) {
+  const set = new Set(cells.map(([r, c]) => key(r, c)));
+  const has = (r, c) => set.has(key(r, c));
   const segs = [];
-  for (const [k, ri] of puzzle.cells) {
-    const [r, c] = k.split(',').map(Number);
-    const right = puzzle.cells.get(key(r, c + 1));
-    if (right !== undefined) segs.push({ x1: c + 1, y1: r, x2: c + 1, y2: r + 1, same: right === ri });
-    const down = puzzle.cells.get(key(r + 1, c));
-    if (down !== undefined) segs.push({ x1: c, y1: r + 1, x2: c + 1, y2: r + 1, same: down === ri });
+  const pad = inset + endPad;
+  for (const [r, c] of cells) {
+    if (has(r, c + 1)) {
+      const y0 = r + (has(r - 1, c) && has(r - 1, c + 1) ? endPad : pad);
+      const y1 = r + 1 - (has(r + 1, c) && has(r + 1, c + 1) ? endPad : pad);
+      if (y1 > y0) segs.push({ x1: c + 1, y1: y0, x2: c + 1, y2: y1 });
+    }
+    if (has(r + 1, c)) {
+      const x0 = c + (has(r, c - 1) && has(r + 1, c - 1) ? endPad : pad);
+      const x1 = c + 1 - (has(r, c + 1) && has(r + 1, c + 1) ? endPad : pad);
+      if (x1 > x0) segs.push({ x1: x0, y1: r + 1, x2: x1, y2: r + 1 });
+    }
   }
   return segs;
 }
 
-/** Bottom-right corner of the south-easternmost cell — official badge seat. */
-export function badgeAnchor(region) {
-  const [r, c] = region.cells.slice().sort((a, b) => b[0] - a[0] || b[1] - a[1])[0];
-  return { x: c + 1, y: r + 1 };
+function cellCentroid(cells) {
+  let x = 0, y = 0, n = 0;
+  for (const [r, c] of cells) { x += c + 0.5; y += r + 0.5; n++; }
+  return n ? { x: x / n, y: y / n } : { x: 0, y: 0 };
 }
 
-export function paintCells(cellRects, puzzle, assigned, statuses, anchor) {
-  for (const [k, rect] of cellRects) {
-    const ri = puzzle.cells.get(k);
-    const sw = swatchFor(assigned, ri);
-    const st = statuses[ri];
-    const isAnchor = anchor && key(...anchor) === k;
+export function badgeCandidates(region, centroid) {
+  const seen = new Set();
+  const pts = [];
+  for (const loop of chainLoops(directedEdges(region.cells))) {
+    for (const [x, y] of loopVerts(loop)) {
+      const id = `${x},${y}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      pts.push({ x, y, d: (x - centroid.x) ** 2 + (y - centroid.y) ** 2, tie: x + y });
+    }
+  }
+  pts.sort((a, b) => a.d - b.d || b.tie - a.tie);
+  return pts;
+}
+
+export function badgeAnchor(region, centroid) {
+  if (!centroid) {
+    const [r, c] = region.cells.slice().sort((a, b) => b[0] - a[0] || b[1] - a[1])[0];
+    return { x: c + 1, y: r + 1 };
+  }
+  const c = badgeCandidates(region, centroid)[0];
+  if (c) return { x: c.x, y: c.y };
+  const [r, col] = region.cells.slice().sort((a, b) => b[0] - a[0] || b[1] - a[1])[0];
+  return { x: col + 1, y: r + 1 };
+}
+
+export function paintRegions(regionPaths, puzzle, assigned, statuses, anchor) {
+  for (const [i, path] of regionPaths) {
+    const sw = swatchFor(assigned, i);
+    const st = statuses[i];
+    const isAnchor = anchor && puzzle.regions[i].cells.some((c) => key(...c) === key(...anchor));
     let fill = sw.fill;
-    if (st === 'violated') fill = `color-mix(in oklab, #e8b0a8 55%, ${sw.fill})`;
-    if (isAnchor) fill = `color-mix(in oklab, #e8c36a 50%, ${sw.fill})`;
-    rect.setAttribute('fill', fill);
+    if (st === 'violated') fill = `color-mix(in oklab, #e8b0a8 45%, ${sw.fill})`;
+    if (isAnchor) fill = `color-mix(in oklab, #e8c36a 40%, ${sw.fill})`;
+    path.setAttribute('fill', fill);
   }
 }
 
-// Static board layer: polyomino frame, region fills, grid, diamond badges.
-// Returns { svg, cellRects, hitRects, tiles, assigned }.
 export function boardSvg(puzzle) {
   const cells = [...puzzle.cells.keys()].map((k) => k.split(',').map(Number));
   let minR = Infinity, minC = Infinity, maxR = -Infinity, maxC = -Infinity;
@@ -195,41 +256,50 @@ export function boardSvg(puzzle) {
     if (r < minR) minR = r; if (c < minC) minC = c;
     if (r > maxR) maxR = r; if (c > maxC) maxC = c;
   }
-  const padL = .42, padT = .42, padR = .62, padB = .62;
+  const pad = 0.55;
   const svg = el('svg', {
-    viewBox: `${minC - padL} ${minR - padT} ${maxC + 1 - minC + padL + padR} ${maxR + 1 - minR + padT + padB}`,
-    class: 'board',
-    role: 'img',
-    'aria-label': 'Pips board',
+    viewBox: `${minC - pad} ${minR - pad} ${maxC + 1 - minC + pad * 2} ${maxR + 1 - minR + pad * 2}`,
+    class: 'board', role: 'img', 'aria-label': 'Pips board',
   });
   const assigned = colorRegions(puzzle);
-  const clipD = unionPath(cells, 0.16);
-  const frameD = unionPath(cells, 0.2);
-  const defs = el('defs', {}, el('clipPath', { id: 'board-clip' }, el('path', { d: clipD })));
-  const fills = el('g', { 'clip-path': 'url(#board-clip)' });
+  const centroid = cellCentroid(cells);
+  const defs = el('defs', {},
+    el('filter', { id: 'region-shadow', x: '-15%', y: '-15%', width: '130%', height: '130%' },
+      el('feDropShadow', { dx: '0', dy: '0.035', stdDeviation: '0.03', 'flood-opacity': '0.16' })),
+    el('filter', { id: 'badge-shadow', x: '-25%', y: '-25%', width: '150%', height: '150%' },
+      el('feDropShadow', { dx: '0', dy: '0.03', stdDeviation: '0.025', 'flood-opacity': '0.28' })),
+  );
+  const regionsG = el('g');
   const tiles = el('g');
   const hits = el('g');
   const badges = el('g');
-  svg.append(
-    defs,
-    el('path', { d: frameD, class: 'frame' }),
-    fills, tiles, hits, badges,
-  );
+  svg.append(defs, regionsG, tiles, hits, badges);
 
-  const cellRects = new Map(), hitRects = new Map();
-  for (const [k, ri] of puzzle.cells) {
+  const regionPaths = new Map();
+  const hitRects = new Map();
+  for (const [i, reg] of puzzle.regions.entries()) {
+    const sw = swatchFor(assigned, i);
+    const g = el('g', { filter: 'url(#region-shadow)' });
+    const path = el('path', {
+      d: unionPath(reg.cells, BOARD.radius, BOARD.inset),
+      fill: sw.fill, stroke: sw.dash, 'stroke-width': BOARD.stroke,
+      'stroke-dasharray': BOARD.dash, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+    });
+    g.append(path);
+    regionPaths.set(i, path);
+    for (const s of regionDividers(reg.cells, BOARD.inset, BOARD.dividerPad)) {
+      g.append(el('line', {
+        x1: s.x1, y1: s.y1, x2: s.x2, y2: s.y2,
+        stroke: sw.dash, 'stroke-width': BOARD.innerStroke,
+        'stroke-dasharray': BOARD.innerDash, 'stroke-linecap': 'round',
+      }));
+    }
+    regionsG.append(g);
+  }
+  for (const [k] of puzzle.cells) {
     const [r, c] = k.split(',').map(Number);
-    const sw = swatchFor(assigned, ri);
-    const rect = el('rect', { x: c, y: r, width: 1, height: 1, fill: sw.fill, class: 'cell' });
-    fills.append(rect); cellRects.set(k, rect);
     const hit = el('rect', { x: c, y: r, width: 1, height: 1, class: 'hit', 'data-cell': k });
     hits.append(hit); hitRects.set(k, hit);
-  }
-  for (const s of gridSegs(puzzle)) {
-    fills.append(el('line', {
-      x1: s.x1, y1: s.y1, x2: s.x2, y2: s.y2,
-      class: s.same ? 'inner' : 'seam',
-    }));
   }
 
   const taken = [];
@@ -237,28 +307,28 @@ export function boardSvg(puzzle) {
     const t = labelText(reg);
     if (!t) continue;
     const sw = swatchFor(assigned, i);
-    let { x, y } = badgeAnchor(reg);
-    let guard = 0;
-    while (taken.some((p) => Math.hypot(p.x - x, p.y - y) < 0.42) && guard < 8) {
-      x += 0.22; y += 0.08; guard++;
+    const cands = badgeCandidates(reg, centroid);
+    let chosen = cands.find((c) => taken.every((p) => Math.hypot(p.x - c.x, p.y - c.y) >= 0.62));
+    if (!chosen) {
+      chosen = { ...(cands[0] ?? { x: 0, y: 0 }) };
+      let guard = 0;
+      while (taken.some((p) => Math.hypot(p.x - chosen.x, p.y - chosen.y) < 0.62) && guard < 8) {
+        chosen.x += 0.22; chosen.y += 0.12; guard++;
+      }
     }
-    taken.push({ x, y });
-    const s = Math.max(0.5, 0.34 + 0.09 * t.length);
-    const g = el('g', { transform: `translate(${x},${y})`, class: 'badge' });
+    taken.push(chosen);
+    const s = Math.max(0.56, 0.4 + 0.1 * t.length);
+    const g = el('g', { transform: `translate(${chosen.x},${chosen.y})`, class: 'badge' });
     g.append(el('rect', {
-      x: -s / 2, y: -s / 2, width: s, height: s, rx: s * 0.16,
-      transform: 'rotate(45)', fill: sw.badge, class: 'badge-diamond',
+      x: -s / 2, y: -s / 2, width: s, height: s, rx: s * 0.18,
+      transform: 'rotate(45)', fill: sw.badge, class: 'badge-diamond', filter: 'url(#badge-shadow)',
     }));
-    g.append(el('text', {
-      class: 'badge-text',
-      'font-size': t.length > 2 ? '0.22' : '0.26',
-    }, t));
+    g.append(el('text', { class: 'badge-text', 'font-size': t.length > 2 ? '0.22' : '0.28' }, t));
     badges.append(g);
   }
-  return { svg, cellRects, hitRects, tiles, assigned };
+  return { svg, hitRects, tiles, assigned, regionPaths };
 }
 
-// Tray tile: horizontal 2x1 domino.
 export function traySvg(a, b) {
   const svg = el('svg', { viewBox: '0 0 2 1' });
   svg.append(tile([0, 0], [0, 1], a, b));

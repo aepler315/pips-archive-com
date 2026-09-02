@@ -51,7 +51,12 @@ test('empty regions are uncolored', () => {
   assert.equal(colorRegions(p)[0], null);
 });
 
-test('badge sits on the south-east cell corner', () => {
+test('inset path is not a bounding box', () => {
+  const cells = [[0, 0], [0, 1]];
+  assert.notEqual(unionPath(cells, 0.2, 0), unionPath(cells, 0.2, 0.1));
+});
+
+test('badge sits on the south-east cell corner without a centroid', () => {
   const p = parsePuzzle({
     dominoes: [[1, 1], [2, 2]],
     regions: [{ indices: [[0, 0], [1, 0], [2, 0], [2, 1]], type: 'sum', target: 4 }],
