@@ -1,5 +1,5 @@
 import { parsePuzzle, emptyState, place, remove, flip, canPlace, evaluate, adjacent, key, LEVELS } from './engine.js';
-import { boardSvg, traySvg, tile, pips } from './render.js';
+import { boardSvg, traySvg, tile, pips, paintRegions } from './render.js';
 import { getResult, getProgress, saveProgress, clearProgress, recordSolve, fmt } from './store.js';
 
 const qs = new URLSearchParams(location.search);
@@ -39,7 +39,7 @@ const progress = getProgress(date, level);
 if (progress?.state?.length === state.length) { state = progress.state; elapsed = progress.elapsed ?? 0; }
 
 // ---- board ----
-const { svg, cellRects, hitRects, tiles } = boardSvg(puzzle);
+const { svg, hitRects, tiles, assigned, regionPaths } = boardSvg(puzzle);
 $('#board').append(svg);
 const trayEl = $('#tray');
 const trayBtns = puzzle.dominoes.map(([a, b], d) => {
@@ -53,11 +53,7 @@ const trayBtns = puzzle.dominoes.map(([a, b], d) => {
 
 function draw() {
   const ev = evaluate(puzzle, state);
-  for (const [k, rect] of cellRects) {
-    const s = ev.regions[puzzle.cells.get(k)];
-    rect.setAttribute('class', 'cell' + (s === 'satisfied' ? ' ok' : s === 'violated' ? ' bad' : '')
-      + (anchor && key(...anchor) === k ? ' anchor' : ''));
-  }
+  paintRegions(regionPaths, puzzle, assigned, ev.regions, anchor);
   tiles.replaceChildren();
   state.forEach((p, d) => {
     if (!p) return;
@@ -123,18 +119,17 @@ const currentElapsed = () => elapsed + (tickStart === null ? 0 : performance.now
 function startClock() { if (tickStart === null && !solvedFlag) { tickStart = performance.now(); timerEl.classList.remove('paused'); } }
 function stopClock() { if (tickStart !== null) { elapsed += performance.now() - tickStart; tickStart = null; timerEl.classList.add('paused'); } }
 setInterval(() => { timerEl.textContent = fmt(currentElapsed()); }, 250);
-timerEl.textContent = fmt(elapsed);
-const started = () => state.some(Boolean);
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { stopClock(); persist(); } else if (started()) startClock();
+  if (document.hidden) { stopClock(); persist(); } else startClock();
 });
 addEventListener('pagehide', () => { stopClock(); persist(); });
-if (started()) startClock();
+startClock();
+timerEl.textContent = fmt(currentElapsed());
 
 // ---- solve / reset ----
 function onSolved() {
+  const ms = Math.round(currentElapsed());
   stopClock(); solvedFlag = true; sel = null; anchor = null;
-  const ms = Math.round(elapsed);
   const res = recordSolve(date, level, ms);
   const box = $('#solved');
   box.hidden = false;
@@ -150,7 +145,7 @@ $('#share').addEventListener('click', async () => {
 $('#reset').addEventListener('click', () => {
   if (!confirm('Clear the board and restart the clock?')) return;
   stopClock(); state = emptyState(puzzle); elapsed = 0; solvedFlag = false; sel = null; anchor = null;
-  clearProgress(date, level); $('#solved').hidden = true; timerEl.textContent = fmt(0); draw();
+  clearProgress(date, level); $('#solved').hidden = true; timerEl.textContent = fmt(0); startClock(); draw();
 });
 
 if (getResult(date, level) && !progress) {

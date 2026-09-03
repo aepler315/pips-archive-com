@@ -1,11 +1,12 @@
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap');
 
 :root {
-  --paper: #EDF0F3;
-  --paper-2: #E2E6EB;
+  --paper: #EFE6D6;
+  --paper-2: #E7DCC8;
   --ink: #1B2530;
   --ink-2: #5A6673;
-  --bone: #FBF8F0;
+  --bone: #FFFDF8;
+  --grout: #EFE6D6;
   --amber: #D9A126;
   --ok: #CFE6CB;
   --ok-ink: #2E6B34;
@@ -44,21 +45,16 @@ h1 { font-size: 1.35rem; font-weight: 600; margin: 24px 0 4px; letter-spacing: -
 .timer { font-variant-numeric: tabular-nums; font-size: 1.4rem; font-weight: 500; min-width: 4.5ch; text-align: right; }
 .timer.paused { color: var(--ink-2); }
 
-.board-wrap { background: var(--bone); border-radius: 16px; padding: 10px; box-shadow: inset 0 0 0 1px var(--paper-2); }
-.board { display: block; width: 100%; height: auto; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
-.board .cell { fill: var(--paper); stroke: none; }
-.board .cell.ok { fill: var(--ok); }
-.board .cell.bad { fill: var(--bad); }
-.board .cell.anchor { fill: var(--amber); fill-opacity: .55; }
-.board .inner { stroke: var(--paper-2); stroke-width: .03; }
-.board .edge { stroke: var(--ink); stroke-width: .07; stroke-linecap: round; }
-.board .tile { fill: var(--bone); stroke: var(--ink); stroke-width: .05; }
-.board .tile.selected { stroke: var(--amber); stroke-width: .11; }
-.board .mid { stroke: var(--ink); stroke-width: .03; }
+.board-wrap { background: var(--grout); border-radius: 16px; padding: 22px 16px 14px; box-shadow: inset 0 0 0 1px var(--paper-2); }
+.board { display: block; width: 100%; height: auto; overflow: visible; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+.board .tile { fill: var(--bone); stroke: var(--ink); stroke-width: .04; }
+.board .tile.selected { stroke: var(--amber); stroke-width: .06; }
+.board .mid { stroke: var(--ink); stroke-opacity: .3; stroke-width: .03; }
 .board .pip { fill: var(--ink); }
 .board .pip.ghost { fill-opacity: .35; }
-.board .label { font-size: .34px; font-weight: 600; text-anchor: middle; dominant-baseline: central; fill: var(--ink); }
-.board .label-bg { fill: var(--bone); stroke: var(--ink); stroke-width: .045; }
+.board .badge { pointer-events: none; }
+.board .badge-diamond { stroke: rgba(255, 255, 255, 0.45); stroke-width: .035; }
+.board .badge-text { fill: #fff; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
 .board .hit { fill: transparent; cursor: pointer; }
 
 .actions { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; min-height: 38px; }
