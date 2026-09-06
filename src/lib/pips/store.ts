@@ -34,6 +34,10 @@ export const getProgress = (date: string, level: Level) =>
   read<Progress>(progressKey(date, level));
 
 export function saveProgress(date: string, level: Level, state: GameState, elapsed: number) {
+  if (!state.some(Boolean)) {
+    const existing = getProgress(date, level);
+    if (existing?.state?.some(Boolean)) return;
+  }
   write(progressKey(date, level), { state, elapsed });
 }
 export function clearProgress(date: string, level: Level) {

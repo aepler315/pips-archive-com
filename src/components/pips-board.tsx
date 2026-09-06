@@ -1,6 +1,6 @@
 import { useId, useRef, useState } from "react";
 import type { Cell, GameState, Puzzle, RegionStatus } from "@/lib/pips/engine";
-import { key, labelText, snapPlacement } from "@/lib/pips/engine";
+import { key, labelText, occupancy, snapPlacement } from "@/lib/pips/engine";
 import { colorRegions, swatchFor, type Swatch } from "@/lib/pips/colors";
 import {
   BOARD,
@@ -20,6 +20,7 @@ type Props = {
   statuses: RegionStatus[];
   sel: Sel;
   hold?: number | null;
+  holdEnd?: 0 | 1;
   pending?: { cell: Cell; pip: number } | null;
   onCell: (cell: Cell) => void;
   onBackground: () => void;
@@ -46,8 +47,9 @@ function Pips({ x, y, v, ghost = false }: { x: number; y: number; v: number; gho
           key={i}
           cx={x + px}
           cy={y + py}
-          r={0.09}
-          className={ghost ? "fill-foreground/30" : "fill-foreground"}
+          r={ghost ? 0.075 : 0.09}
+          className={ghost ? "fill-none stroke-foreground/70" : "fill-foreground"}
+          strokeWidth={ghost ? 0.045 : undefined}
         />
       ))}
     </g>
@@ -80,22 +82,24 @@ function Tile({
   const my = (r1 + r2) / 2 + 0.5;
   const horiz = r1 === r2;
   return (
-    <g className={ghost ? "pointer-events-none opacity-55" : "pointer-events-none"}>
+    <g className="pointer-events-none">
       <rect
         x={x}
         y={y}
         width={w}
         height={h}
         rx={0.18}
+        fill={ghost ? "white" : undefined}
+        fillOpacity={ghost ? 0.18 : undefined}
         className={
           ghost
-            ? "fill-card stroke-ring"
+            ? "stroke-foreground/55"
             : selected
               ? "fill-card stroke-ring"
               : "fill-card stroke-foreground/80"
         }
-        strokeWidth={ghost || selected ? 0.06 : 0.04}
-        strokeDasharray={ghost ? "0.1 0.07" : undefined}
+        strokeWidth={ghost || selected ? 0.055 : 0.04}
+        strokeDasharray={ghost ? "0.12 0.08" : undefined}
       />
       {horiz ? (
         <line x1={mx} y1={y + 0.12} x2={mx} y2={y + h - 0.12} className="stroke-foreground/30" strokeWidth={0.03} />
@@ -119,10 +123,13 @@ function HalfTile({ cell, pip }: { cell: Cell; pip: number }) {
         width={1 - inset * 2}
         height={1 - inset * 2}
         rx={0.18}
-        className="fill-card stroke-ring"
-        strokeWidth={0.06}
+        fill="white"
+        fillOpacity={0.18}
+        className="stroke-foreground/55"
+        strokeWidth={0.055}
+        strokeDasharray="0.12 0.08"
       />
-      <Pips x={c} y={r} v={pip} />
+      <Pips x={c} y={r} v={pip} ghost />
     </g>
   );
 }
@@ -180,6 +187,7 @@ export function PipsBoard({
   statuses,
   sel,
   hold,
+  holdEnd = 0,
   pending,
   onCell,
   onBackground,
@@ -198,9 +206,10 @@ export function PipsBoard({
   const drag = useRef<{ id: number; x: number; y: number; holding: boolean } | null>(null);
   const snap =
     hold != null && hover
-      ? snapPlacement(puzzle, state, hold, hover, pending?.cell ?? null)
+      ? snapPlacement(puzzle, state, hold, hover, pending?.cell ?? null, holdEnd)
       : null;
   const ghost = hold != null ? snap?.[hold] ?? null : null;
+  const ghostOcc = snap ? occupancy(puzzle, snap) : null;
 
   const cellFrom = (svg: SVGSVGElement, clientX: number, clientY: number) => {
     const cell = cellAtPointer(svg, clientX, clientY, vb);
@@ -259,19 +268,10 @@ export function PipsBoard({
         }
         const moved = Math.hypot(e.clientX - d.x, e.clientY - d.y);
         const cell = cellFrom(e.currentTarget, e.clientX, e.clientY);
-        if (d.holding) {
-          if (cell) onCell(cell);
-          else onBackground();
-          setHover(null);
-          return;
-        }
-        if (moved > 14) {
-          setHover(null);
-          return;
-        }
+        setHover(null);
+        if (!d.holding && moved > 14 && cell) return;
         if (cell) onCell(cell);
         else onBackground();
-        setHover(null);
       }}
       onPointerCancel={(e) => {
         if (drag.current?.id !== e.pointerId) return;
@@ -288,13 +288,20 @@ export function PipsBoard({
         </filter>
       </defs>
 
+      <rect
+        x={vbX}
+        y={vbY}
+        width={vbW}
+        height={vbH}
+        fill="var(--color-grout)"
+        pointerEvents="all"
+      />
+
       {puzzle.regions.map((reg, i) => {
         const sw = swatchFor(assigned, i);
         const st = statuses[i];
-        const isAnchor = pending ? reg.cells.some((c) => key(...c) === key(...pending.cell)) : false;
         let fill = sw.fill;
         if (st === "violated") fill = `color-mix(in oklab, #e8b0a8 45%, ${sw.fill})`;
-        if (isAnchor) fill = `color-mix(in oklab, #e8c36a 40%, ${sw.fill})`;
         const d = unionPath(reg.cells, BOARD.radius, BOARD.inset);
         const divs = regionDividers(reg.cells, BOARD.inset, BOARD.dividerPad);
         return (
@@ -340,14 +347,16 @@ export function PipsBoard({
         );
       })}
 
-      {ghost ? (
+      {ghost && ghostOcc ? (
         <Tile
           c1={ghost.cells[0]}
           c2={ghost.cells[1]}
-          a={puzzle.dominoes[hold!][0]}
-          b={puzzle.dominoes[hold!][1]}
+          a={ghostOcc.get(key(...ghost.cells[0]))?.pip ?? puzzle.dominoes[hold!][0]}
+          b={ghostOcc.get(key(...ghost.cells[1]))?.pip ?? puzzle.dominoes[hold!][1]}
           ghost
         />
+      ) : hover && hold != null && !pending ? (
+        <HalfTile cell={hover} pip={puzzle.dominoes[hold][holdEnd]} />
       ) : pending ? (
         <HalfTile cell={pending.cell} pip={pending.pip} />
       ) : null}

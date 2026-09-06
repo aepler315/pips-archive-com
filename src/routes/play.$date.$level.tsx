@@ -12,7 +12,7 @@ import {
   legalNeighbors,
   parsePuzzle,
   remove,
-  rotatePlaced,
+  rotateTab,
   snapPlacement,
   type Cell,
   type GameState,
@@ -42,8 +42,8 @@ export const Route = createFileRoute("/play/$date/$level")({
   component: PlayPage,
 });
 
-type Sel = { kind: "tray" | "board"; d: number } | null;
-type Anchor = { cell: Cell; high: boolean };
+type Sel = { kind: "tray" | "board"; d: number; end: 0 | 1 } | null;
+type Anchor = { cell: Cell };
 
 const TAP_MS = 320;
 
@@ -84,15 +84,9 @@ function PlayPage() {
   return <Play key={`${date}-${level}`} date={date} level={level} raw={day} />;
 }
 
-function Shell({ children, wide, lock }: { children: ReactNode; wide?: boolean; lock?: boolean }) {
+function Shell({ children, wide }: { children: ReactNode; wide?: boolean }) {
   return (
-    <div
-      className={cn(
-        "mx-auto flex flex-col px-4 py-5 sm:px-6",
-        lock ? "h-dvh overflow-hidden" : "min-h-dvh",
-        wide ? "max-w-[980px]" : "max-w-[720px]",
-      )}
-    >
+    <div className={cn("mx-auto flex min-h-dvh flex-col px-4 py-5 sm:px-6", wide ? "max-w-[980px]" : "max-w-[720px]")}>
       <SiteHeader current="play" />
       {children}
     </div>
@@ -101,51 +95,51 @@ function Shell({ children, wide, lock }: { children: ReactNode; wide?: boolean; 
 
 function FitStage({
   aspect,
-  contain,
+  onBlank,
   children,
 }: {
   aspect: number;
-  contain?: boolean;
+  onBlank?: () => void;
   children: ReactNode;
 }) {
   const host = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ w: 280, h: 280 });
+  const [size, setSize] = useState({ w: 0, h: 0 });
   useEffect(() => {
     const el = host.current;
     if (!el) return;
     const fit = () => {
-      const { width, height } = el.getBoundingClientRect();
+      const width = el.getBoundingClientRect().width;
       if (width < 8) return;
-      let w: number;
-      let h: number;
-      if (contain) {
-        if (height < 8) return;
-        w = width;
-        h = height;
-        if (w / h > aspect) w = h * aspect;
-        else h = w / aspect;
-      } else {
-        w = width;
-        h = width / aspect;
-      }
-      w = Math.round(w);
-      h = Math.round(h);
+      const w = Math.round(width);
+      const h = Math.max(120, Math.round(width / aspect));
       setSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
     };
     fit();
     const ro = new ResizeObserver(fit);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [aspect, contain]);
+  }, [aspect]);
   return (
     <div
       ref={host}
-      className={cn(
-        "pointer-events-none flex w-full items-center justify-center",
-        contain ? "min-h-0 min-w-0 flex-1" : "shrink-0",
-      )}
+      className="w-full min-w-0"
+      onPointerUp={(e) => {
+        if (e.button !== 0) return;
+        if (e.target === e.currentTarget) onBlank?.();
+      }}
     >
-      <div className="board-wrap pointer-events-auto" style={{ width: size.w, height: size.h }}>
+      <div
+        className="board-wrap mx-auto"
+        onPointerUp={(e) => {
+          if (e.button !== 0) return;
+          if (e.target === e.currentTarget) onBlank?.();
+        }}
+        style={
+          size.w
+            ? { width: size.w, height: size.h }
+            : { width: "100%", aspectRatio: String(aspect) }
+        }
+      >
         {children}
       </div>
     </div>
@@ -167,7 +161,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const bounds = useMemo(() => boundsOf(puzzleCells(puzzle)), [puzzle]);
   const rows = bounds.maxR - bounds.minR + 1;
   const cols = bounds.maxC - bounds.minC + 1;
-  const sideTray = rows >= 6 || rows / Math.max(cols, 1) >= 1.25;
+  const tall = rows >= 6 || rows / Math.max(cols, 1) >= 1.25;
   const [isMd, setIsMd] = useState(false);
   const [mousey, setMousey] = useState(false);
   useEffect(() => {
@@ -185,7 +179,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
       hover.removeEventListener("change", go);
     };
   }, []);
-  const contain = sideTray && isMd;
+  const sideTray = tall && isMd;
 
   const [state, setState] = useState<GameState>(() => {
     const p = getProgress(date, level);
@@ -206,6 +200,10 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const selRef = useRef<Sel>(null);
   const lastPickup = useRef<{ d: number; keys: Set<string>; t: number } | null>(null);
   const lastTap = useRef<{ d: number; t: number } | null>(null);
+  const tabHeld = useRef(false);
+  const tabRot = useRef<{ d: number; n: number } | null>(null);
+  const puzzleRef = useRef(puzzle);
+  puzzleRef.current = puzzle;
   const [fresh, setFresh] = useState<number | null>(null);
   const anchorRef = useRef<Anchor | null>(null);
   stateRef.current = state;
@@ -258,26 +256,64 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
       clearInterval(id);
       document.removeEventListener("visibilitychange", vis);
       removeEventListener("pagehide", hide);
+      if (!solvedRef.current) saveProgress(date, level, stateRef.current, nowElapsed());
     };
   }, [date, level]);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === "Tab") {
+        e.preventDefault();
+        tabHeld.current = true;
+        if (e.repeat || solvedRef.current) return;
+        const cur = selRef.current;
+        const st = stateRef.current;
+        const puz = puzzleRef.current;
+        if (cur?.kind === "board" && st[cur.d]) {
+          const prev = tabRot.current;
+          const n = prev?.d === cur.d ? prev.n + 1 : 0;
+          tabRot.current = { d: cur.d, n };
+          const next = rotateTab(puz, st, cur.d, n);
+          startClock();
+          stateRef.current = next;
+          setState(next);
+          if (!solvedRef.current) saveProgress(date, level, next, nowElapsed());
+          return;
+        }
+        if (cur?.kind === "tray" && !st[cur.d]) {
+          holdSel({ ...cur, end: cur.end === 0 ? 1 : 0 });
+        }
+        return;
+      }
       if (e.code !== "Escape") return;
       holdSel(null);
       holdAnchor(null);
       setFresh(null);
     };
-    addEventListener("keydown", onKey);
-    return () => removeEventListener("keydown", onKey);
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "Tab") tabHeld.current = false;
+    };
+    const onBlur = () => {
+      tabHeld.current = false;
+    };
+    addEventListener("keydown", onKeyDown);
+    addEventListener("keyup", onKeyUp);
+    addEventListener("blur", onBlur);
+    return () => {
+      removeEventListener("keydown", onKeyDown);
+      removeEventListener("keyup", onKeyUp);
+      removeEventListener("blur", onBlur);
+    };
   }, []);
 
   useEffect(() => {
+    if (stateRef.current.some(Boolean)) return;
     const p = getProgress(date, level);
-    if (p?.state?.length === puzzle.dominoes.length) {
+    if (p?.state?.some(Boolean) && p.state.length === puzzle.dominoes.length) {
       stateRef.current = p.state;
       setState(p.state);
       elapsedRef.current = p.elapsed ?? 0;
+      setNow((n) => n + 1);
     }
   }, [date, level, puzzle.dominoes.length]);
 
@@ -302,19 +338,22 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     if (!solvedRef.current) saveProgress(date, level, next, nowElapsed());
   }
 
-  function applyHold(next: GameState, hold: number | null) {
-    holdSel(hold == null ? null : { kind: "tray", d: hold });
+  function applyHold(next: GameState, hold: number | null, end: 0 | 1 = 0) {
+    holdSel(hold == null ? null : { kind: "tray", d: hold, end });
     holdAnchor(null);
     afterMove(next);
   }
 
-  function pick(d: number) {
+  function pick(d: number, end: 0 | 1 = 0) {
     if (solvedFlag) return;
     setFresh(null);
     lastTap.current = null;
+    tabRot.current = null;
     const st = stateRef.current;
+    const [a, b] = puzzle.dominoes[d];
+    if (tabHeld.current) end = a >= b ? 0 : 1;
     const curSel = selRef.current;
-    if (curSel?.kind === "tray" && curSel.d === d && !st[d]) {
+    if (curSel?.kind === "tray" && curSel.d === d && curSel.end === end && !st[d]) {
       holdSel(null);
       holdAnchor(null);
       lastPickup.current = null;
@@ -326,13 +365,13 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
         keys: new Set(st[d]!.cells.map((c) => key(...c))),
         t: performance.now(),
       };
-      holdSel({ kind: "tray", d });
+      holdSel({ kind: "tray", d, end });
       holdAnchor(null);
       afterMove(remove(st, d));
       return;
     }
     lastPickup.current = null;
-    applyHold(st, d);
+    applyHold(st, d, end);
   }
 
   function markTap(d: number) {
@@ -356,18 +395,27 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     lastPickup.current = null;
     const st = stateRef.current;
     const cur = anchorRef.current;
-    const snapped = snapPlacement(puzzle, st, d, clicked, cur?.cell ?? null);
+    const end = selRef.current?.end ?? 0;
+    const snapped = snapPlacement(puzzle, st, d, clicked, cur?.cell ?? null, end);
     if (snapped?.[d]) {
       afterMove(snapped);
       setFresh(d);
       markTap(d);
       holdSel(null);
       holdAnchor(null);
+      tabRot.current = null;
       return;
     }
     if (cur) return;
     if (legalNeighbors(puzzle, st, d, clicked).length === 0) return;
-    holdAnchor({ cell: clicked, high: true });
+    holdAnchor({ cell: clicked });
+  }
+
+  function clearSel() {
+    holdSel(null);
+    holdAnchor(null);
+    setFresh(null);
+    tabRot.current = null;
   }
 
   function onCell(cell: Cell) {
@@ -377,29 +425,63 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     const occupiedBy = st.findIndex(
       (p) => p && p.cells.some((c) => key(...c) === key(...cell)),
     );
-    const holding = curSel?.kind === "tray" && !st[curSel.d];
+
     if (occupiedBy >= 0) {
+      const placed = st[occupiedBy]!;
+      let end: 0 | 1 = key(...placed.cells[0]) === key(...cell) ? 0 : 1;
+      const [a, b] = puzzle.dominoes[occupiedBy];
+      if (tabHeld.current) end = a >= b ? 0 : 1;
       const tap = lastTap.current;
-      if (tap && tap.d === occupiedBy && performance.now() - tap.t < TAP_MS) {
+      if (
+        tap &&
+        tap.d === occupiedBy &&
+        performance.now() - tap.t < TAP_MS &&
+        curSel?.kind === "board" &&
+        curSel.d === occupiedBy &&
+        curSel.end === end
+      ) {
         pullOff(occupiedBy);
         return;
       }
       markTap(occupiedBy);
-      if (!holding) afterMove(rotatePlaced(puzzle, st, occupiedBy));
+      if (tabRot.current?.d !== occupiedBy) tabRot.current = null;
+      holdSel({ kind: "board", d: occupiedBy, end });
+      holdAnchor(null);
+      setFresh(null);
+      lastPickup.current = null;
       return;
     }
+
     const lp = lastPickup.current;
     if (lp && performance.now() - lp.t < 280 && lp.keys.has(key(...cell))) {
       lastPickup.current = null;
-      holdSel(null);
-      holdAnchor(null);
+      clearSel();
       return;
     }
     lastPickup.current = null;
+
+    if (curSel?.kind === "board") {
+      const d = curSel.d;
+      const lifted = remove(st, d);
+      const snapped = snapPlacement(puzzle, lifted, d, cell, null, curSel.end);
+      if (snapped?.[d]) {
+        afterMove(snapped);
+        setFresh(d);
+        markTap(d);
+        holdSel(null);
+        holdAnchor(null);
+        tabRot.current = null;
+        return;
+      }
+      if (legalNeighbors(puzzle, lifted, d, cell).length === 0) return;
+      afterMove(lifted);
+      holdSel({ kind: "tray", d, end: curSel.end });
+      holdAnchor({ cell });
+      return;
+    }
+
     if (curSel?.kind !== "tray" || st[curSel.d]) {
-      holdSel(null);
-      holdAnchor(null);
-      setFresh(null);
+      clearSel();
       return;
     }
     dropOn(curSel.d, cell);
@@ -435,26 +517,26 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const verb = mousey ? "Click" : "Tap";
   const hint = solvedFlag
     ? ""
-    : fresh != null
-      ? mousey
-        ? "Click to rotate, double-click to remove."
-        : "Tap to rotate, double-tap to remove."
+    : sel?.kind === "board"
+      ? `${verb} a new cell to move it. Tab rotates.`
       : sel?.kind === "tray"
         ? anchor
           ? puzzle.dominoes[sel.d][0] === puzzle.dominoes[sel.d][1]
             ? `${verb} the other cell for this double.`
             : `${verb} a neighbouring cell to set the other half.`
+          : `${verb} the cell this pip should sit on. Tab flips it.`
+        : fresh != null
+          ? mousey
+            ? "Click to rotate, double-click to remove."
+            : "Tap to rotate, double-tap to remove."
           : mousey
-            ? "Hover to preview a snap. Click the cell for the larger pip."
-            : "Drag onto a cell to preview, lift to place."
-        : mousey
-          ? "Click a domino, then a cell."
-          : "Tap a domino, then a cell.";
+            ? "Click a domino, or a placed one to move it."
+            : "Tap a domino, or a placed one to move it.";
 
   const prior = getResult(date, level);
 
   return (
-    <Shell wide={sideTray} lock={contain}>
+    <Shell wide={sideTray}>
       <h1 className="font-display mt-7 text-[1.45rem] font-semibold tracking-tight">{dateLabel}</h1>
       <p className="mt-1 text-muted-foreground">
         {level[0].toUpperCase() + level.slice(1)} · by {raw[level].constructors ?? "unknown"}
@@ -506,47 +588,46 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
         </p>
       ) : null}
 
+      <div className={cn("mt-3 flex gap-5", sideTray ? "flex-row items-start" : "flex-col")}>
       <div
-        className={cn(
-          "mt-3 flex",
-          contain
-            ? "min-h-0 flex-1 flex-row items-stretch gap-5"
-            : "flex-col",
-        )}
+        className={sideTray ? "min-w-0 flex-1" : "w-full"}
+        onPointerUp={(e) => {
+          if (e.button !== 0) return;
+          if (e.target === e.currentTarget) clearSel();
+        }}
       >
-        <FitStage aspect={(cols + 1.4) / (rows + 1.4)} contain={contain}>
+          <FitStage aspect={(cols + 1.4) / (rows + 1.4)} onBlank={clearSel}>
           <PipsBoard
             puzzle={puzzle}
             state={state}
             statuses={ev.regions}
             sel={sel}
             hold={sel?.kind === "tray" && !state[sel.d] ? sel.d : null}
+            holdEnd={sel?.kind === "tray" ? sel.end : 0}
             pending={
               anchor && sel?.kind === "tray"
                 ? {
                     cell: anchor.cell,
-                    pip: Math.max(...puzzle.dominoes[sel.d]),
+                    pip: puzzle.dominoes[sel.d][sel.end],
                   }
                 : null
             }
             onCell={onCell}
-            onBackground={() => {
-              holdSel(null);
-              holdAnchor(null);
-              setFresh(null);
-            }}
+            onBackground={clearSel}
           />
         </FitStage>
+        </div>
 
-        <div className={cn("mt-3 min-w-0 shrink-0", sideTray && "md:mt-0 md:w-[13.75rem] md:overflow-y-auto")}>
+        <div className={cn("min-w-0 shrink-0", sideTray ? "w-[14.5rem]" : "w-full")}>
           <p className="min-h-[1.4em] text-sm text-muted-foreground">{hint}</p>
           <PipsTray
             dominoes={puzzle.dominoes}
             placed={state.map(Boolean)}
-            selected={sel?.kind === "tray" ? sel.d : null}
+            selected={sel?.kind === "tray" || sel?.kind === "board" ? sel.d : null}
+            selectedEnd={sel?.kind === "tray" || sel?.kind === "board" ? sel.end : null}
             disabled={solvedFlag}
             onPick={pick}
-            side={contain}
+            side={sideTray}
           />
           <div className="mt-4 flex items-center justify-between">
             <span className="text-sm text-muted-foreground">

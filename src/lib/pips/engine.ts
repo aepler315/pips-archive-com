@@ -249,9 +249,12 @@ export function placeOnClick(
 }
 
 /**
- * If clicking `cell` would auto-place `d` (unique neighbor, unique
- * constraint-legal neighbor, or completing an anchored pair), return that
- * next state. Otherwise null — click would only set/keep an anchor.
+ * If clicking `cell` would auto-place `d` (only empty neighbor, or only
+ * neighbor that doesn't immediately break a region), return that next
+ * state. When exactly one orientation satisfies the constraints, rotate
+ * into it even if that isn't the pip the user had selected. Otherwise
+ * the stored half `end` sits on `cell` (or on `anchor` when completing
+ * a pair). Never uses tiling search.
  */
 export function snapPlacement(
   puzzle: Puzzle,
@@ -259,35 +262,57 @@ export function snapPlacement(
   d: number,
   cell: Cell,
   anchor: Cell | null,
+  end: 0 | 1 = 0,
 ): GameState | null {
   if (state[d]) return null;
-  const [a, b] = puzzle.dominoes[d];
-  const isDouble = a === b;
-  const commit = (c1: Cell, c2: Cell) =>
-    isDouble ? place(puzzle, state, d, c1, c2) : placeOnClick(puzzle, state, d, c1, c2);
+
+  const tryPair = (clicked: Cell, other: Cell, e: 0 | 1): GameState | null => {
+    const preferred = placeActive(puzzle, state, d, clicked, other, e);
+    if (preferred[d] && !hardViolated(puzzle, preferred)) return preferred;
+    const flipped = placeActive(puzzle, state, d, clicked, other, (1 - e) as 0 | 1);
+    if (flipped[d] && !hardViolated(puzzle, flipped)) return flipped;
+    return preferred[d] ? preferred : null;
+  };
 
   if (anchor) {
     if (key(...anchor) === key(...cell)) return null;
     if (adjacent(anchor, cell) && canPlace(puzzle, state, d, anchor, cell)) {
-      const next = commit(anchor, cell);
-      return next[d] ? next : null;
+      return tryPair(anchor, cell, end);
     }
     return null;
   }
 
   const n = legalNeighbors(puzzle, state, d, cell);
   if (n.length === 0) return null;
-  let pick = n.length === 1 ? n[0] : null;
-  if (!pick) {
-    const fits = n.filter((other) => {
-      const next = commit(cell, other);
-      return !!next[d] && !hardViolated(puzzle, next) && remainderTileable(puzzle, next);
-    });
-    if (fits.length === 1) pick = fits[0];
+  if (n.length === 1) return tryPair(cell, n[0], end);
+
+  const fits: { end: 0 | 1; next: GameState }[] = [];
+  const double = puzzle.dominoes[d][0] === puzzle.dominoes[d][1];
+  for (const other of n) {
+    for (const e of (double ? [0] : [0, 1]) as (0 | 1)[]) {
+      const next = placeActive(puzzle, state, d, cell, other, e);
+      if (next[d] && !hardViolated(puzzle, next)) fits.push({ end: e, next });
+    }
   }
-  if (!pick) return null;
-  const next = commit(cell, pick);
-  return next[d] ? next : null;
+  if (fits.length === 1) return fits[0].next;
+  const preferred = fits.filter((f) => f.end === end);
+  if (preferred.length === 1) return preferred[0].next;
+  return null;
+}
+
+/** Put stored half `end` of `d` on `clicked`, the other half on `other`. */
+export function placeActive(
+  puzzle: Puzzle,
+  state: GameState,
+  d: number,
+  clicked: Cell,
+  other: Cell,
+  end: 0 | 1,
+): GameState {
+  if (!canPlace(puzzle, state, d, clicked, other)) return state;
+  return end === 0
+    ? place(puzzle, state, d, clicked, other)
+    : place(puzzle, state, d, other, clicked);
 }
 
 export function openPairs(puzzle: Puzzle, state: GameState, d: number): [Cell, Cell][] {
@@ -482,6 +507,16 @@ export function rotatePlaced(puzzle: Puzzle, state: GameState, d: number): GameS
       : place(puzzle, lifted, d, moved, keep);
   }
   return flip(state, d);
+}
+
+/**
+ * Tab rotate: even press turns 90° when a landing exists (else 180°).
+ * Odd press is always an in-place 180° flip — same two cells, pips swapped.
+ */
+export function rotateTab(puzzle: Puzzle, state: GameState, d: number, pass: number): GameState {
+  if (!state[d]) return state;
+  if (pass % 2 === 1) return flip(state, d);
+  return rotatePlaced(puzzle, state, d);
 }
 
 export function evaluateRegion(
