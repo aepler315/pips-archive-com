@@ -18,8 +18,10 @@ import {
   chooseOther,
   placePreferValid,
   preferOpenSeconds,
+  placeActive,
   remove,
   rotatePlaced,
+  rotateTab,
   validPlacements,
   validSeconds,
   type RawPuzzle,
@@ -213,7 +215,7 @@ test("remainderTileable: a leftover singleton is not a whole-domino cover", () =
   assert.equal(remainderTileable(p, st), false);
 });
 
-test("snapPlacement: unique tileable neighbor stands up off a 11-cell instead of isolating a stub", () => {
+test("snapPlacement does not use tiling remainder to pick among several legal neighbors", () => {
   const day = JSON.parse(readFileSync(new URL("../../../public/data/puzzles/2026-08-28.json", import.meta.url), "utf8")) as {
     medium: RawPuzzle;
   };
@@ -225,11 +227,7 @@ test("snapPlacement: unique tileable neighbor stands up off a 11-cell instead of
   st = place(p, st, d61, [2, 1], [2, 0]);
   const n = legalNeighbors(p, st, d54, [2, 2]);
   assert.ok(n.length > 1);
-  const next = snapPlacement(p, st, d54, [2, 2], null);
-  assert.ok(next);
-  const occ = occupancy(p, next!);
-  assert.equal(occ.get(key(2, 2))?.d, d54);
-  assert.equal(occ.get(key(1, 2))?.d, d54);
+  assert.equal(snapPlacement(p, st, d54, [2, 2], null, 0), null);
 });
 
 test("legalNeighbors: a junction has more than one direction", () => {
@@ -447,6 +445,73 @@ test("rotatePlaced flips 180 when no 90° landing exists", () => {
   const occ = occupancy(p, st);
   assert.equal(occ.get(key(0, 0))?.pip, 1);
   assert.equal(occ.get(key(0, 1))?.pip, 6);
+});
+
+test("rotateTab second press flips in place without moving", () => {
+  const p = parsePuzzle(corridor);
+  let st = emptyState(p);
+  st = place(p, st, 0, [0, 0], [0, 1]);
+  st = rotateTab(p, st, 0, 0);
+  const after90 = [...occupancy(p, st).keys()].sort();
+  assert.deepEqual(after90, ["0,1", "1,1"]);
+  const pipA = occupancy(p, st).get(key(0, 1))?.pip;
+  const pipB = occupancy(p, st).get(key(1, 1))?.pip;
+  st = rotateTab(p, st, 0, 1);
+  const occ = occupancy(p, st);
+  assert.deepEqual([...occ.keys()].sort(), after90);
+  assert.equal(occ.get(key(0, 1))?.pip, pipB);
+  assert.equal(occ.get(key(1, 1))?.pip, pipA);
+});
+
+test("snapPlacement rotates into the only constraint-legal orientation", () => {
+  const p = parsePuzzle({
+    dominoes: [
+      [4, 1],
+      [2, 2],
+    ],
+    regions: [
+      { type: "sum", target: 1, indices: [[0, 0]] },
+      { type: "empty", indices: [[0, 1], [2, 0], [2, 1]] },
+    ],
+  });
+  const st = emptyState(p);
+  const next = snapPlacement(p, st, 0, [0, 0], null, 0);
+  assert.ok(next);
+  const occ = occupancy(p, next!);
+  assert.equal(occ.get(key(0, 0))?.pip, 1);
+  assert.equal(occ.get(key(0, 1))?.pip, 4);
+});
+
+test("snapPlacement last 4-1 flips even when the 4 was the selected pip", () => {
+  const p = parsePuzzle({
+    dominoes: [
+      [4, 1],
+      [2, 2],
+    ],
+    regions: [
+      { type: "sum", target: 1, indices: [[0, 0]] },
+      { type: "sum", target: 4, indices: [[0, 1]] },
+      { type: "empty", indices: [[1, 0], [1, 1]] },
+    ],
+  });
+  let st = emptyState(p);
+  st = place(p, st, 1, [1, 0], [1, 1]);
+  const next = snapPlacement(p, st, 0, [0, 0], null, 0);
+  assert.ok(next);
+  const occ = occupancy(p, next!);
+  assert.equal(occ.get(key(0, 0))?.pip, 1);
+  assert.equal(occ.get(key(0, 1))?.pip, 4);
+});
+
+test("placeActive puts stored half end on the clicked cell", () => {
+  const p = parsePuzzle(corridor);
+  const st = emptyState(p);
+  const a = placeActive(p, st, 0, [0, 0], [0, 1], 0);
+  assert.equal(occupancy(p, a).get(key(0, 0))?.pip, 6);
+  assert.equal(occupancy(p, a).get(key(0, 1))?.pip, 1);
+  const b = placeActive(p, st, 0, [0, 0], [0, 1], 1);
+  assert.equal(occupancy(p, b).get(key(0, 0))?.pip, 1);
+  assert.equal(occupancy(p, b).get(key(0, 1))?.pip, 6);
 });
 
 
