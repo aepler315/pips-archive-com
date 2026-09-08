@@ -630,7 +630,6 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
 
   function doReset() {
     stopClock();
-    elapsedRef.current = 0;
     solvedRef.current = false;
     const empty = emptyState(puzzle);
     stateRef.current = empty;
@@ -832,7 +831,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
                 <AlertDialogContent>
                   <AlertDialogTitle>Clear the board?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Every placed domino comes off and the clock restarts from 0:00.
+                    Every placed domino comes off. The clock keeps running.
                   </AlertDialogDescription>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
