@@ -7,24 +7,21 @@
     "nf3": "0.3.17"
   },
   "scripts": {
+    "predev": "node scripts/sync-public-data.mjs",
     "dev": "vite dev --host 0.0.0.0 --port 8080",
+    "prebuild": "node scripts/sync-public-data.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "pretest": "node scripts/sync-public-data.mjs",
     "test": "node --test 'test/*.test.mjs' && npx tsx --test src/lib/pips/*.test.ts",
     "lint": "eslint .",
     "fetch": "node scripts/fetch.mjs",
     "backfill": "node scripts/fetch.mjs --all",
-    "index": "node scripts/build-index.mjs",
-    "serve": "python3 -m http.server 8000"
+    "index": "node scripts/build-index.mjs"
   },
   "dependencies": {
-    "@electric-sql/pglite": "^0.5.4",
     "@hookform/resolvers": "^5.7.0",
-    "better-auth": "~1.6.30",
-    "jose": "6.2.9",
-    "kysely": "^0.28.5",
-    "pg": "^8.16.3",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-avatar": "^1.1.11",
@@ -74,7 +71,6 @@
   "devDependencies": {
     "@eslint/js": "^9.20.0",
     "@types/node": "^22.16.5",
-    "@types/pg": "^8.11.10",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.2.0",

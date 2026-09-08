@@ -21,6 +21,6 @@ jobs:
         run: |
           git config user.name  'pipsarchive-bot'
           git config user.email 'bot@pipsarchive.com'
-          git add data
+          git add data src/data/archive.json
           git diff --cached --quiet || git commit -m "puzzle data $(date -u +%F)"
           git push

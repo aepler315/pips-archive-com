@@ -488,7 +488,12 @@ function swing(pivot: Cell, other: Cell, rot: (v: Cell) => Cell): Cell {
   return [pivot[0] + dr, pivot[1] + dc];
 }
 
-/** 90° if a free on-board landing exists, otherwise 180° (swap the two halves). */
+/**
+ * 90° if a free on-board landing exists, otherwise 180° (swap the two halves).
+ * Tries both directions around `c1` before ever pivoting around `c2`, so a
+ * cramped neighbor on one side doesn't make the rotation swap which cell
+ * stays put when the other side would have worked just as well.
+ */
 export function rotatePlaced(puzzle: Puzzle, state: GameState, d: number): GameState {
   const p = state[d];
   if (!p) return state;
@@ -496,8 +501,8 @@ export function rotatePlaced(puzzle: Puzzle, state: GameState, d: number): GameS
   const lifted = remove(state, d);
   const tries: [Cell, Cell][] = [
     [c1, swing(c1, c2, rot90cw)],
-    [c2, swing(c2, c1, rot90cw)],
     [c1, swing(c1, c2, rot90ccw)],
+    [c2, swing(c2, c1, rot90cw)],
     [c2, swing(c2, c1, rot90ccw)],
   ];
   for (const [keep, moved] of tries) {
@@ -582,5 +587,23 @@ export function labelText(reg: Region): string {
       return "≠";
     case "empty":
       return "";
+  }
+}
+
+/** A plain-language explanation of a region's rule, for a tooltip or screen reader. */
+export function regionDescription(reg: Region): string {
+  switch (reg.type) {
+    case "sum":
+      return `These cells must add up to exactly ${reg.target}.`;
+    case "less":
+      return `These cells must add up to less than ${reg.target}.`;
+    case "greater":
+      return `These cells must add up to more than ${reg.target}.`;
+    case "equals":
+      return "These cells must all show the same number.";
+    case "unequal":
+      return "These cells must all show a different number.";
+    case "empty":
+      return "No rule for these cells.";
   }
 }

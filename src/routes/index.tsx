@@ -6,12 +6,15 @@ import { buttonVariants } from "@/components/ui/button";
 import { LEVELS, type Level } from "@/lib/pips/engine";
 import { prefetchDay } from "@/lib/pips/days";
 import { groupMonths, monthChip, monthLabel, resolveMonth } from "@/lib/pips/months";
-import { fmt, getResult } from "@/lib/pips/store";
+import { allResults, fmt, type Result } from "@/lib/pips/store";
 import type { ArchiveIndex, IndexEntry } from "@/lib/pips/types";
 import archiveJson from "@/data/archive.json";
 import { cn } from "@/lib/utils";
 
 type Search = { month?: string };
+type ResultMap = Map<string, Result>;
+
+const resultKeyOf = (date: string, level: Level) => `${date}:${level}`;
 
 export const Route = createFileRoute("/")({
   validateSearch: (raw: Record<string, unknown>): Search => ({
@@ -20,12 +23,12 @@ export const Route = createFileRoute("/")({
   component: Home,
 });
 
-function pickRandomUnsolved(puzzles: IndexEntry[]): [string, Level] | null {
+function pickRandomUnsolved(puzzles: IndexEntry[], results: ResultMap): [string, Level] | null {
   if (!puzzles.length) return null;
   const start = Math.floor(Math.random() * puzzles.length);
   for (let i = 0; i < puzzles.length; i++) {
     const p = puzzles[(start + i) % puzzles.length];
-    const open = LEVELS.filter((l) => !getResult(p.date, l));
+    const open = LEVELS.filter((l) => !results.has(resultKeyOf(p.date, l)));
     if (open.length) return [p.date, open[Math.floor(Math.random() * open.length)]];
   }
   return null;
@@ -53,10 +56,20 @@ function Home() {
   const older = pageI >= 0 && pageI < monthKeys.length - 1 ? monthKeys[pageI + 1] : null;
   const newer = pageI > 0 ? monthKeys[pageI - 1] : null;
 
+  // One localStorage scan for the whole page instead of one getItem+JSON.parse
+  // per date-and-level (hundreds to thousands of calls as the archive grows).
+  const results = useMemo<ResultMap>(() => {
+    if (!browser) return new Map();
+    return new Map(allResults().map((r) => [resultKeyOf(r.date, r.level), r]));
+  }, [browser]);
+
   const solvedCount = useMemo(() => {
     if (!browser) return 0;
-    return puzzles.reduce((n, p) => n + LEVELS.filter((l) => getResult(p.date, l)).length, 0);
-  }, [puzzles, browser]);
+    return puzzles.reduce(
+      (n, p) => n + LEVELS.filter((l) => results.has(resultKeyOf(p.date, l))).length,
+      0,
+    );
+  }, [puzzles, browser, results]);
 
   useEffect(() => {
     prefetchDay(idx.last);
@@ -87,7 +100,7 @@ function Home() {
         >
           Latest puzzle
         </Link>
-        <RandomUnsolved puzzles={puzzles} />
+        <RandomUnsolved puzzles={puzzles} results={results} />
       </div>
 
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -140,7 +153,7 @@ function Home() {
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {page?.days.map((p) => (
-          <DayCard key={p.date} entry={p} ready={browser} />
+          <DayCard key={p.date} entry={p} results={results} />
         ))}
       </div>
 
@@ -151,7 +164,7 @@ function Home() {
   );
 }
 
-function RandomUnsolved({ puzzles }: { puzzles: IndexEntry[] }) {
+function RandomUnsolved({ puzzles, results }: { puzzles: IndexEntry[]; results: ResultMap }) {
   const navigate = useNavigate();
   const [none, setNone] = useState(false);
   if (none) {
@@ -164,7 +177,7 @@ function RandomUnsolved({ puzzles }: { puzzles: IndexEntry[] }) {
       type="button"
       className={cn(buttonVariants({ variant: "secondary" }))}
       onClick={() => {
-        const pick = pickRandomUnsolved(puzzles);
+        const pick = pickRandomUnsolved(puzzles, results);
         if (!pick) {
           setNone(true);
           return;
@@ -181,32 +194,41 @@ function RandomUnsolved({ puzzles }: { puzzles: IndexEntry[] }) {
   );
 }
 
-function DayCard({ entry, ready }: { entry: IndexEntry; ready: boolean }) {
+function DayCard({ entry, results }: { entry: IndexEntry; results: ResultMap }) {
   return (
     <div className="rounded-[var(--radius-md)] bg-card p-3 shadow-[inset_0_0_0_1px_var(--color-border)]">
       <div className="font-semibold">{dayLabel(entry.date)}</div>
       <div className="mt-2 flex gap-1.5">
         {LEVELS.map((l) => (
-          <LevelChip key={l} date={entry.date} level={l} ready={ready} />
+          <LevelChip key={l} date={entry.date} level={l} result={results.get(resultKeyOf(entry.date, l))} />
         ))}
       </div>
     </div>
   );
 }
 
-function LevelChip({ date, level, ready }: { date: string; level: Level; ready: boolean }) {
-  const r = ready ? getResult(date, level) : null;
+function LevelChip({
+  date,
+  level,
+  result: r,
+}: {
+  date: string;
+  level: Level;
+  result: Result | undefined;
+}) {
+  const initial = level[0].toUpperCase();
   return (
     <Link
       to="/play/$date/$level"
       params={{ date, level }}
       title={level}
+      aria-label={`${level}${r ? ` — solved in ${fmt(r.best)}` : " — not solved yet"}`}
       className={cn(
         "flex-1 rounded-[var(--radius-sm)] py-1 text-center text-xs no-underline tabular-nums",
         r ? "bg-ok text-ok-ink" : "bg-muted text-muted-foreground",
       )}
     >
-      {r ? fmt(r.best) : level[0].toUpperCase()}
+      {r ? `${initial}·${fmt(r.best)}` : initial}
     </Link>
   );
 }

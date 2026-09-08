@@ -1,9 +1,24 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+
+// useLayoutEffect warns when it runs during SSR; fall back to useEffect
+// there (its client-only work never executes during a prerender pass).
+const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { TriangleAlert } from "lucide-react";
 import { PipsBoard } from "@/components/pips-board";
 import { PipsTray } from "@/components/pips-tray";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   LEVELS,
   emptyState,
@@ -11,6 +26,7 @@ import {
   key,
   legalNeighbors,
   parsePuzzle,
+  remainderTileable,
   remove,
   rotateTab,
   snapPlacement,
@@ -45,7 +61,9 @@ export const Route = createFileRoute("/play/$date/$level")({
 type Sel = { kind: "tray" | "board"; d: number; end: 0 | 1 } | null;
 type Anchor = { cell: Cell };
 
-const TAP_MS = 320;
+// Matches the platform double-click convention (Windows' own default is
+// 500ms) rather than a tighter window a deliberate double-click can miss.
+const TAP_MS = 500;
 
 function PlayPending() {
   return (
@@ -96,10 +114,14 @@ function Shell({ children, wide }: { children: ReactNode; wide?: boolean }) {
 function FitStage({
   aspect,
   onBlank,
+  maxHeight,
   children,
 }: {
   aspect: number;
   onBlank?: () => void;
+  /** Available vertical room, when known, so the board can claim it instead
+   *  of always sizing purely off its container's width. */
+  maxHeight?: number | null;
   children: ReactNode;
 }) {
   const host = useRef<HTMLDivElement>(null);
@@ -110,15 +132,19 @@ function FitStage({
     const fit = () => {
       const width = el.getBoundingClientRect().width;
       if (width < 8) return;
-      const w = Math.round(width);
-      const h = Math.max(120, Math.round(width / aspect));
+      let w = Math.round(width);
+      let h = Math.max(120, Math.round(w / aspect));
+      if (maxHeight && h > maxHeight) {
+        h = Math.max(120, Math.round(maxHeight));
+        w = Math.round(h * aspect);
+      }
       setSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
     };
     fit();
     const ro = new ResizeObserver(fit);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [aspect]);
+  }, [aspect, maxHeight]);
   return (
     <div
       ref={host}
@@ -164,7 +190,11 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const tall = rows >= 6 || rows / Math.max(cols, 1) >= 1.25;
   const [isMd, setIsMd] = useState(false);
   const [mousey, setMousey] = useState(false);
-  useEffect(() => {
+  // useLayoutEffect (not useEffect) so this resolves before the browser
+  // paints: the prerendered/SSR markup always starts from `false` (no
+  // `window`), and updating after paint would flash "Tap" before it
+  // corrects to "Click" on every desktop load.
+  useIsomorphicLayoutEffect(() => {
     const wide = window.matchMedia("(min-width: 768px)");
     const hover = window.matchMedia("(hover: hover) and (pointer: fine)");
     const go = () => {
@@ -181,16 +211,47 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   }, []);
   const sideTray = tall && isMd;
 
-  const [state, setState] = useState<GameState>(() => {
-    const p = getProgress(date, level);
-    if (p?.state?.length === puzzle.dominoes.length) return p.state;
-    return emptyState(puzzle);
-  });
+  // Stacked layout (board above the tray) sizes the board purely from its
+  // width by default, which leaves cells small on a tall phone screen even
+  // when there's plenty of vertical room below the fold. Give it a real
+  // height budget: viewport height minus whatever sits above the board and
+  // whatever the tray section below it needs.
+  const boardHostRef = useRef<HTMLDivElement>(null);
+  const belowRef = useRef<HTMLDivElement>(null);
+  const [heightBudget, setHeightBudget] = useState<number | null>(null);
+  useEffect(() => {
+    if (sideTray) {
+      setHeightBudget(null);
+      return;
+    }
+    const recompute = () => {
+      const top = boardHostRef.current?.getBoundingClientRect().top ?? 0;
+      const below = belowRef.current?.getBoundingClientRect().height ?? 0;
+      const budget = window.innerHeight - top - below - 24;
+      setHeightBudget(budget > 160 ? budget : null);
+    };
+    recompute();
+    window.addEventListener("resize", recompute);
+    const ro = new ResizeObserver(recompute);
+    if (belowRef.current) ro.observe(belowRef.current);
+    return () => {
+      window.removeEventListener("resize", recompute);
+      ro.disconnect();
+    };
+  }, [sideTray]);
+
+  // Always starts empty — matching exactly what the prerendered/SSR markup
+  // shows, since the server never has access to localStorage. A saved board
+  // is restored a moment later by the effect below, once the client has
+  // hydrated; reading it here instead would mismatch the server output for
+  // any returning player and crash the hydration for the whole page.
+  const [state, setState] = useState<GameState>(() => emptyState(puzzle));
   const [solvedFlag, setSolvedFlag] = useState(false);
   const [sel, setSel] = useState<Sel>(null);
   const [anchor, setAnchor] = useState<Anchor | null>(null);
   const [solveMs, setSolveMs] = useState<number | null>(null);
   const [solveDetail, setSolveDetail] = useState("");
+  const [justCopied, setJustCopied] = useState(false);
   const [, setNow] = useState(0);
 
   const elapsedRef = useRef(0);
@@ -202,6 +263,14 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const lastTap = useRef<{ d: number; t: number } | null>(null);
   const tabHeld = useRef(false);
   const tabRot = useRef<{ d: number; n: number } | null>(null);
+  const historyRef = useRef<GameState[]>([]);
+  const touchedRef = useRef(false);
+  const [canUndo, setCanUndo] = useState(false);
+  // Any localStorage read used in render (not just to seed initial state)
+  // must wait for this, or it renders differently than the server did for
+  // every returning player and crashes hydration for the whole page.
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
   const puzzleRef = useRef(puzzle);
   puzzleRef.current = puzzle;
   const [fresh, setFresh] = useState<number | null>(null);
@@ -221,6 +290,13 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   }
 
   const ev = useMemo(() => evaluate(puzzle, state), [puzzle, state]);
+  // The remaining empty cells can only ever be a dead end if no perfect
+  // domino tiling of them exists any more (an odd or isolated leftover) —
+  // catch that early rather than let the player discover it by hand.
+  const stuck = useMemo(
+    () => !ev.solved && state.some(Boolean) && !remainderTileable(puzzle, state),
+    [puzzle, state, ev.solved],
+  );
 
   const nowElapsed = () => clockMs(elapsedRef.current, tickStart.current, performance.now());
 
@@ -235,13 +311,25 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     }
   };
 
+  // Passive lifecycle saves (tab hidden/closed) only write when this
+  // session has actually touched the board — an empty board it never
+  // touched might just be a moment before the restore effect below loads
+  // real progress, and a stray empty write here shouldn't be able to race
+  // that (e.g. the same puzzle open in another tab with real progress).
+  // A deliberate return to empty (afterMove, e.g. via undo) always saves.
+  const safeSave = () => {
+    if (solvedRef.current) return;
+    if (!touchedRef.current && !stateRef.current.some(Boolean)) return;
+    saveProgress(date, level, stateRef.current, nowElapsed());
+  };
+
   useEffect(() => {
     startClock();
     const id = setInterval(() => setNow((n) => n + 1), 250);
     const vis = () => {
       if (document.hidden) {
         stopClock();
-        if (!solvedRef.current) saveProgress(date, level, stateRef.current, nowElapsed());
+        safeSave();
       } else {
         startClock();
       }
@@ -249,40 +337,44 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     document.addEventListener("visibilitychange", vis);
     const hide = () => {
       stopClock();
-      if (!solvedRef.current) saveProgress(date, level, stateRef.current, nowElapsed());
+      safeSave();
     };
     addEventListener("pagehide", hide);
     return () => {
       clearInterval(id);
       document.removeEventListener("visibilitychange", vis);
       removeEventListener("pagehide", hide);
-      if (!solvedRef.current) saveProgress(date, level, stateRef.current, nowElapsed());
+      safeSave();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, level]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Tab") {
-        e.preventDefault();
         tabHeld.current = true;
-        if (e.repeat || solvedRef.current) return;
         const cur = selRef.current;
         const st = stateRef.current;
+        const hasSelection = !!cur && (cur.kind === "board" ? !!st[cur.d] : !st[cur.d]);
+        if (!hasSelection) return; // nothing selected: let Tab move focus normally
+        e.preventDefault();
+        if (e.repeat || solvedRef.current) return;
         const puz = puzzleRef.current;
-        if (cur?.kind === "board" && st[cur.d]) {
+        if (cur.kind === "board" && st[cur.d]) {
           const prev = tabRot.current;
           const n = prev?.d === cur.d ? prev.n + 1 : 0;
           tabRot.current = { d: cur.d, n };
-          const next = rotateTab(puz, st, cur.d, n);
-          startClock();
-          stateRef.current = next;
-          setState(next);
-          if (!solvedRef.current) saveProgress(date, level, next, nowElapsed());
+          afterMove(rotateTab(puz, st, cur.d, n));
           return;
         }
         if (cur?.kind === "tray" && !st[cur.d]) {
           holdSel({ ...cur, end: cur.end === 0 ? 1 : 0 });
         }
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.code === "KeyZ") {
+        e.preventDefault();
+        undo();
         return;
       }
       if (e.code !== "Escape") return;
@@ -304,7 +396,11 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
       removeEventListener("keyup", onKeyUp);
       removeEventListener("blur", onBlur);
     };
-  }, []);
+    // afterMove/undo read and write only through refs (stateRef, historyRef,
+    // solvedRef) plus the date/level already in the dep list, so a fresh
+    // closure isn't needed on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, level]);
 
   useEffect(() => {
     if (stateRef.current.some(Boolean)) return;
@@ -316,6 +412,8 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
       setNow((n) => n + 1);
     }
   }, [date, level, puzzle.dominoes.length]);
+
+  const solvedBannerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (ev.solved && !solvedRef.current) {
@@ -331,11 +429,54 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     }
   }, [ev.solved, date, level]);
 
-  function afterMove(next: GameState) {
+  useEffect(() => {
+    if (solveMs === null) return;
+    // The click that placed the final domino still has pending default
+    // focus handling (a click landing on the non-focusable SVG board resets
+    // focus to <body>) that can run after this effect and win the race,
+    // undoing a single focus() call regardless of how it's deferred. Keep
+    // reasserting for a few frames — cheap, and it stops as soon as it holds.
+    let frames = 0;
+    let raf = 0;
+    // Something un-focuses the banner asynchronously, and not always on the
+    // very next frame — so keep re-asserting for a short window instead of
+    // stopping the first time a check happens to catch it still focused.
+    const tick = () => {
+      const el = solvedBannerRef.current;
+      if (!el) return;
+      if (document.activeElement !== el) el.focus();
+      frames++;
+      if (frames < 20) raf = requestAnimationFrame(tick);
+    };
+    tick();
+    return () => cancelAnimationFrame(raf);
+  }, [solveMs]);
+
+  const HISTORY_MAX = 50;
+
+  function afterMove(next: GameState, opts: { history?: boolean } = {}) {
+    touchedRef.current = true;
+    if (opts.history !== false && next !== stateRef.current) {
+      historyRef.current.push(stateRef.current);
+      if (historyRef.current.length > HISTORY_MAX) historyRef.current.shift();
+      setCanUndo(true);
+    }
     startClock();
     stateRef.current = next;
     setState(next);
     if (!solvedRef.current) saveProgress(date, level, next, nowElapsed());
+  }
+
+  function undo() {
+    if (solvedRef.current) return;
+    const prev = historyRef.current.pop();
+    if (prev === undefined) return;
+    setCanUndo(historyRef.current.length > 0);
+    holdSel(null);
+    holdAnchor(null);
+    setFresh(null);
+    tabRot.current = null;
+    afterMove(prev, { history: false });
   }
 
   function applyHold(next: GameState, hold: number | null, end: 0 | 1 = 0) {
@@ -487,8 +628,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     dropOn(curSel.d, cell);
   }
 
-  function reset() {
-    if (!confirm("Clear the board and restart the clock?")) return;
+  function doReset() {
     stopClock();
     elapsedRef.current = 0;
     solvedRef.current = false;
@@ -501,14 +641,21 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     setFresh(null);
     setSolveMs(null);
     clearProgress(date, level);
+    historyRef.current = [];
+    setCanUndo(false);
     startClock();
   }
 
   async function share() {
-    const text = `Pips ${date} ${level}: ${fmt(solveMs ?? nowElapsed())}`;
+    const url = `${location.origin}/play/${date}/${level}`;
+    const scoreLine = `Pips ${date} ${level}: ${fmt(solveMs ?? nowElapsed())}`;
     try {
-      if (navigator.share) await navigator.share({ text });
-      else await navigator.clipboard.writeText(text);
+      if (navigator.share) await navigator.share({ text: scoreLine, url });
+      else {
+        await navigator.clipboard.writeText(`${scoreLine}\n${url}`);
+        setJustCopied(true);
+        setTimeout(() => setJustCopied(false), 1500);
+      }
     } catch {
       /* cancelled */
     }
@@ -533,7 +680,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
             ? "Click a domino, or a placed one to move it."
             : "Tap a domino, or a placed one to move it.";
 
-  const prior = getResult(date, level);
+  const prior = hydrated ? getResult(date, level) : null;
 
   return (
     <Shell wide={sideTray}>
@@ -542,10 +689,23 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
         {level[0].toUpperCase() + level.slice(1)} · by {raw[level].constructors ?? "unknown"}
       </p>
 
+      <details className="mt-2 text-sm text-muted-foreground">
+        <summary className="inline cursor-pointer select-none text-foreground underline decoration-foreground/30 underline-offset-4">
+          How to read the board
+        </summary>
+        <p className="mt-1 max-w-[38rem] leading-relaxed">
+          Place every domino so each colored region meets its rule: a number is a sum,{" "}
+          <span className="text-foreground">=</span> means equal pips,{" "}
+          <span className="text-foreground">≠</span> means all different, and{" "}
+          <span className="text-foreground">{"< / >"}</span> compare the region&apos;s sum. Cream
+          cells are free.
+        </p>
+      </details>
+
       <div className="mt-4 mb-3 flex flex-wrap items-center justify-between gap-3">
         <div className="inline-flex rounded-full bg-muted p-0.5">
           {LEVELS.map((l) => {
-            const done = !!getResult(date, l);
+            const done = hydrated && !!getResult(date, l);
             return (
               <Link
                 key={l}
@@ -573,13 +733,19 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
       </div>
 
       {solveMs !== null ? (
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] bg-ok px-4 py-3 text-ok-ink">
+        <div
+          ref={solvedBannerRef}
+          role="status"
+          aria-live="polite"
+          tabIndex={-1}
+          className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] bg-ok px-4 py-3 text-ok-ink focus:outline-none"
+        >
           <div>
             Solved in <strong className="text-xl tabular-nums">{fmt(solveMs)}</strong>{" "}
             <span>{solveDetail}</span>
           </div>
           <Button variant="secondary" size="sm" onClick={share}>
-            Share
+            {justCopied ? "Copied" : "Share"}
           </Button>
         </div>
       ) : prior && !getProgress(date, level) && !state.some(Boolean) ? (
@@ -588,15 +754,35 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
         </p>
       ) : null}
 
+      {stuck ? (
+        <div
+          role="status"
+          className="mb-3 flex items-center gap-2 rounded-[var(--radius-md)] bg-bad px-4 py-2.5 text-sm text-bad-ink"
+        >
+          <TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
+          Some cells can no longer be covered by any domino from here — try moving one.
+        </div>
+      ) : null}
+
       <div className={cn("mt-3 flex gap-5", sideTray ? "flex-row items-start" : "flex-col")}>
       <div
-        className={sideTray ? "min-w-0 flex-1" : "w-full"}
+        ref={boardHostRef}
+        className={cn(
+          sideTray ? "min-w-0 flex-1" : "w-full",
+          // A wide puzzle (e.g. a 9-column hard board) is width-bound on a
+          // narrow phone; reclaim the page's own edge padding for the board
+          // specifically, since it needs the room more than the margin does.
+          // `w-full` alone would keep the negative margin from actually
+          // widening the box (100% is relative to the padded parent), so
+          // the bled width has to be set explicitly too.
+          !sideTray && "-mx-4 w-[calc(100%+2rem)] sm:mx-0 sm:w-full",
+        )}
         onPointerUp={(e) => {
           if (e.button !== 0) return;
           if (e.target === e.currentTarget) clearSel();
         }}
       >
-          <FitStage aspect={(cols + 1.4) / (rows + 1.4)} onBlank={clearSel}>
+          <FitStage aspect={(cols + 1.4) / (rows + 1.4)} maxHeight={heightBudget} onBlank={clearSel}>
           <PipsBoard
             puzzle={puzzle}
             state={state}
@@ -618,7 +804,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
         </FitStage>
         </div>
 
-        <div className={cn("min-w-0 shrink-0", sideTray ? "w-[14.5rem]" : "w-full")}>
+        <div ref={belowRef} className={cn("min-w-0 shrink-0", sideTray ? "w-[14.5rem]" : "w-full")}>
           <p className="min-h-[1.4em] text-sm text-muted-foreground">{hint}</p>
           <PipsTray
             dominoes={puzzle.dominoes}
@@ -630,12 +816,33 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
             side={sideTray}
           />
           <div className="mt-4 flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">
+            <span className="text-sm text-muted-foreground" aria-live="polite">
               {ev.placed} / {ev.total} placed
             </span>
-            <Button variant="ghost" size="sm" onClick={reset}>
-              Clear board
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="sm" onClick={undo} disabled={!canUndo || solvedFlag}>
+                Undo
+              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="ghost" size="sm">
+                    Clear board
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogTitle>Clear the board?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Every placed domino comes off and the clock restarts from 0:00.
+                  </AlertDialogDescription>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction destructive onClick={doReset}>
+                      Clear board
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
           </div>
         </div>
       </div>

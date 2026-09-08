@@ -55,34 +55,38 @@ export function PipsTray({
         side ? "grid-cols-4 sm:grid-cols-5 md:grid-cols-2" : "grid-cols-4 sm:grid-cols-5 md:grid-cols-7",
       )}
     >
-      {dominoes.map(([a, b], d) => (
-        <div
-          key={d}
-          className={cn(
-            "relative min-h-[2.75rem] rounded-[var(--radius-md)] p-1.5",
-            placed[d] && selected !== d && "opacity-30",
-            selected === d && "bg-muted",
-          )}
-        >
-          <MiniTile a={a} b={b} end={selected === d ? (selectedEnd ?? null) : null} />
-          <button
-            type="button"
-            aria-label={`Domino ${a}-${b}, ${a} pip`}
-            aria-pressed={selected === d && selectedEnd === 0}
-            disabled={disabled}
-            onClick={() => onPick(d, 0)}
-            className="absolute inset-y-0 left-0 w-1/2 rounded-l-[var(--radius-md)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
-          <button
-            type="button"
-            aria-label={`Domino ${a}-${b}, ${b} pip`}
-            aria-pressed={selected === d && selectedEnd === 1}
-            disabled={disabled}
-            onClick={() => onPick(d, 1)}
-            className="absolute inset-y-0 right-0 w-1/2 rounded-r-[var(--radius-md)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
-        </div>
-      ))}
+      {dominoes.map(([a, b], d) => {
+        const onBoard = placed[d] && selected !== d;
+        const suffix = onBoard ? ", on the board — tap to pick it up" : "";
+        return (
+          <div
+            key={d}
+            className={cn(
+              "relative min-h-[2.75rem] rounded-[var(--radius-md)] p-1.5",
+              onBoard && "opacity-55",
+              selected === d && "bg-muted",
+            )}
+          >
+            <MiniTile a={a} b={b} end={selected === d ? (selectedEnd ?? null) : null} />
+            <button
+              type="button"
+              aria-label={`Domino ${a}-${b}, ${a} pip${suffix}`}
+              aria-pressed={selected === d && selectedEnd === 0}
+              disabled={disabled}
+              onClick={() => onPick(d, 0)}
+              className="absolute inset-y-0 left-0 w-1/2 rounded-l-[var(--radius-md)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            <button
+              type="button"
+              aria-label={`Domino ${a}-${b}, ${b} pip${suffix}`}
+              aria-pressed={selected === d && selectedEnd === 1}
+              disabled={disabled}
+              onClick={() => onPick(d, 1)}
+              className="absolute inset-y-0 right-0 w-1/2 rounded-r-[var(--radius-md)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }
