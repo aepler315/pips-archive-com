@@ -188,7 +188,16 @@ export function regionDividers(cells: Cell[], inset: number, endPad: number): Se
   return segs;
 }
 
-/** Bottom-right corner of the region's south-easternmost cell — NYT's placement. */
+// How far the badge center sits back from the raw grid corner, into the
+// region's own southeasternmost cell. Must clear BOARD.inset (the gap the
+// region's own colored shape is pulled back by) with real margin — anchoring
+// at the bare grid corner puts the badge in the neutral grout between
+// regions, not inside the color it's meant to label.
+const BADGE_CORNER_PULL = 0.24;
+
+/** Near the south-east corner of the region's south-easternmost cell, pulled
+ *  in from the grid line so the badge sits on this region's own fill rather
+ *  than in the grout it shares with its neighbors. */
 export function badgeAnchor(region: Region): { x: number; y: number } {
   let r = region.cells[0][0];
   let c = region.cells[0][1];
@@ -198,7 +207,7 @@ export function badgeAnchor(region: Region): { x: number; y: number } {
       c = cc;
     }
   }
-  return { x: c + 1, y: r + 1 };
+  return { x: c + 1 - BADGE_CORNER_PULL, y: r + 1 - BADGE_CORNER_PULL };
 }
 
 export function badgeCandidates(
