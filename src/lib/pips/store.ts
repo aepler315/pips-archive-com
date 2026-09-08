@@ -23,7 +23,19 @@ const read = <T>(k: string): T | null => {
 };
 const write = (k: string, v: unknown) => {
   if (typeof window === "undefined") return;
-  localStorage.setItem(k, JSON.stringify(v));
+  try {
+    localStorage.setItem(k, JSON.stringify(v));
+  } catch {
+    /* storage full or blocked (e.g. Safari Private Browsing): play on unsaved */
+  }
+};
+const remove = (k: string) => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(k);
+  } catch {
+    /* storage full or blocked */
+  }
 };
 
 export const resultKey = (date: string, level: Level) => `${P}result:${date}:${level}`;
@@ -34,15 +46,10 @@ export const getProgress = (date: string, level: Level) =>
   read<Progress>(progressKey(date, level));
 
 export function saveProgress(date: string, level: Level, state: GameState, elapsed: number) {
-  if (!state.some(Boolean)) {
-    const existing = getProgress(date, level);
-    if (existing?.state?.some(Boolean)) return;
-  }
   write(progressKey(date, level), { state, elapsed });
 }
 export function clearProgress(date: string, level: Level) {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(progressKey(date, level));
+  remove(progressKey(date, level));
 }
 
 export function recordSolve(date: string, level: Level, ms: number): Result {
@@ -83,12 +90,30 @@ export function exportAll() {
   return JSON.stringify({ version: 1, exported: new Date().toISOString(), data }, null, 1);
 }
 
-export function importAll(text: string) {
-  const obj = JSON.parse(text) as { version?: number; data?: Record<string, Result> };
+function isValidResult(v: unknown): v is Result {
+  if (!v || typeof v !== "object") return false;
+  const r = v as Record<string, unknown>;
+  return (
+    typeof r.first === "number" &&
+    typeof r.best === "number" &&
+    typeof r.plays === "number" &&
+    r.plays >= 1 &&
+    typeof r.solvedAt === "string" &&
+    typeof r.lastAt === "string"
+  );
+}
+
+export function importAll(text: string): { imported: number; skipped: number } {
+  const obj = JSON.parse(text) as { version?: number; data?: Record<string, unknown> };
   if (obj?.version !== 1 || !obj.data) throw new Error("Not a Pips Archive export");
-  let n = 0;
+  let imported = 0;
+  let skipped = 0;
   for (const [k, v] of Object.entries(obj.data)) {
     if (!k.startsWith(`${P}result:`)) continue;
+    if (!isValidResult(v)) {
+      skipped++;
+      continue;
+    }
     const cur = read<Result>(k);
     write(
       k,
@@ -98,13 +123,15 @@ export function importAll(text: string) {
             best: Math.min(cur.best, v.best),
             solvedAt: cur.solvedAt < v.solvedAt ? cur.solvedAt : v.solvedAt,
             lastAt: cur.lastAt > v.lastAt ? cur.lastAt : v.lastAt,
-            plays: cur.plays + v.plays,
+            // max, not sum: re-importing the same backup should be a no-op,
+            // not double the recorded play count each time.
+            plays: Math.max(cur.plays, v.plays),
           }
         : v,
     );
-    n++;
+    imported++;
   }
-  return n;
+  return { imported, skipped };
 }
 
 export function eraseAll() {
@@ -114,7 +141,7 @@ export function eraseAll() {
     const k = localStorage.key(i);
     if (k?.startsWith(P)) keys.push(k);
   }
-  keys.forEach((k) => localStorage.removeItem(k));
+  keys.forEach(remove);
 }
 
 export function clockMs(accumulated: number, tickStart: number | null, now: number): number {

@@ -1,6 +1,6 @@
 import { useId, useRef, useState } from "react";
 import type { Cell, GameState, Puzzle, RegionStatus } from "@/lib/pips/engine";
-import { key, labelText, occupancy, snapPlacement } from "@/lib/pips/engine";
+import { key, labelText, occupancy, regionDescription, snapPlacement } from "@/lib/pips/engine";
 import { colorRegions, swatchFor, type Swatch } from "@/lib/pips/colors";
 import {
   BOARD,
@@ -135,18 +135,18 @@ function HalfTile({ cell, pip }: { cell: Cell; pip: number }) {
 }
 
 function Badge({
-  regionId,
   x,
   y,
   text,
+  description,
   swatch,
   status,
   filterId,
 }: {
-  regionId: number;
   x: number;
   y: number;
   text: string;
+  description: string;
   swatch: Swatch;
   status: RegionStatus;
   filterId: string;
@@ -163,7 +163,7 @@ function Badge({
         transform="rotate(45)"
         fill={swatch.badge}
         stroke={status === "violated" ? "var(--color-bad-ink)" : "rgba(255,255,255,0.45)"}
-        strokeWidth={0.035}
+        strokeWidth={status === "violated" ? 0.09 : 0.035}
         filter={`url(#${filterId})`}
       />
       <text
@@ -176,7 +176,7 @@ function Badge({
       >
         {text}
       </text>
-      <title>{`Region ${regionId}: ${text}`}</title>
+      <title>{status === "violated" ? `Broken: ${description}` : description}</title>
     </g>
   );
 }
@@ -286,6 +286,18 @@ export function PipsBoard({
         <filter id={`${uid}-badge`} x="-25%" y="-25%" width="150%" height="150%">
           <feDropShadow dx="0" dy="0.03" stdDeviation="0.025" floodOpacity="0.28" />
         </filter>
+        {/* A violated region gets this hatch on top of its fill so the
+            signal doesn't rely on a color shift alone — some swatches
+            barely change color when tinted "broken". */}
+        <pattern
+          id={`${uid}-hatch`}
+          width={0.16}
+          height={0.16}
+          patternTransform="rotate(45)"
+          patternUnits="userSpaceOnUse"
+        >
+          <line x1={0} y1={0} x2={0} y2={0.16} stroke="var(--color-bad-ink)" strokeWidth={0.05} strokeOpacity={0.5} />
+        </pattern>
       </defs>
 
       <rect
@@ -315,6 +327,7 @@ export function PipsBoard({
               strokeLinecap="round"
               strokeLinejoin="round"
             />
+            {st === "violated" && <path d={d} fill={`url(#${uid}-hatch)`} />}
             {divs.map((s, j) => (
               <line
                 key={j}
@@ -369,10 +382,10 @@ export function PipsBoard({
         return (
           <Badge
             key={`b${i}`}
-            regionId={i}
             x={pos.x}
             y={pos.y}
             text={t}
+            description={regionDescription(reg)}
             swatch={sw}
             status={statuses[i]}
             filterId={`${uid}-badge`}

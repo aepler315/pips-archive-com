@@ -24,7 +24,11 @@ export function monthLabel(ym: string) {
 
 export function monthChip(ym: string) {
   const [y, m] = ym.split("-").map(Number);
-  return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: "short", year: "2-digit" });
+  const parts = new Date(y, m - 1, 1)
+    .toLocaleDateString(undefined, { month: "short", year: "2-digit" })
+    .split(" ");
+  // "Sep 26" reads as a day of the month; "Sep '26" reads as a year.
+  return parts.length === 2 ? `${parts[0]} '${parts[1]}` : parts.join(" ");
 }
 
 export function resolveMonth(groups: MonthGroup[], requested?: string) {

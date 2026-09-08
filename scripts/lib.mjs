@@ -6,6 +6,7 @@ import { validatePayload, describe, LEVELS } from '../js/engine.js';
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const PUZZLE_DIR = join(ROOT, 'data', 'puzzles');
 export const INDEX_PATH = join(ROOT, 'data', 'index.json');
+export const APP_INDEX_PATH = join(ROOT, 'src', 'data', 'archive.json');
 export const LAUNCH_DATE = '2025-08-18';
 
 export const isoDate = (d) => d.toISOString().slice(0, 10);
@@ -43,5 +44,9 @@ export function buildIndex() {
   const index = { generated: new Date().toISOString(), first: dates[0] ?? null,
                   last: dates.at(-1) ?? null, count: dates.length, puzzles: entries };
   writeFileSync(INDEX_PATH, JSON.stringify(index));
+  // The TanStack app bundles its own copy so the archive page needs no fetch;
+  // keep it in lockstep with data/index.json on every build.
+  mkdirSync(dirname(APP_INDEX_PATH), { recursive: true });
+  writeFileSync(APP_INDEX_PATH, JSON.stringify(index));
   return index;
 }
