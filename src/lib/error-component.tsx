@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { TriangleAlert } from "lucide-react";
 
 export function AppErrorComponent({ error }: ErrorComponentProps) {
+  const message = error instanceof Error ? error.message : String(error);
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-3 bg-background px-6 text-center text-foreground">
       <span className="text-bad-ink" aria-hidden="true">
@@ -19,10 +20,8 @@ export function AppErrorComponent({ error }: ErrorComponentProps) {
       >
         Back to the archive
       </Link>
-      {error.message ? (
-        <p className="mt-4 max-w-md text-xs break-words text-muted-foreground/70">
-          {error.message}
-        </p>
+      {message ? (
+        <p className="mt-4 max-w-md text-xs break-words text-muted-foreground/70">{message}</p>
       ) : null}
     </main>
   );
