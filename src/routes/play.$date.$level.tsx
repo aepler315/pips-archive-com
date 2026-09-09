@@ -172,6 +172,54 @@ function FitStage({
   );
 }
 
+function BoardControls({
+  placed,
+  total,
+  canUndo,
+  onUndo,
+  onReset,
+  disabled,
+}: {
+  placed: number;
+  total: number;
+  canUndo: boolean;
+  onUndo: () => void;
+  onReset: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="mt-4 flex items-center justify-between">
+      <span className="text-sm text-muted-foreground" aria-live="polite">
+        {placed} / {total} placed
+      </span>
+      <div className="flex items-center gap-1">
+        <Button variant="ghost" size="sm" onClick={onUndo} disabled={!canUndo || disabled}>
+          Undo
+        </Button>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="ghost" size="sm">
+              Clear board
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogTitle>Clear the board?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Every placed domino comes off. The clock keeps running.
+            </AlertDialogDescription>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction destructive onClick={onReset}>
+                Clear board
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </div>
+  );
+}
+
 function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay }) {
   const puzzle = useMemo(() => parsePuzzle(raw[level]), [raw, level]);
   const dateLabel = useMemo(
@@ -210,6 +258,14 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     };
   }, []);
   const sideTray = tall && isMd;
+  // A tall puzzle on a narrow phone is height-bound, not width-bound (see
+  // heightBudget below): the board ends up with lots of unused margin on
+  // both sides. Put the tray there instead of below, split into two
+  // portrait-tile columns flanking the board.
+  const flankMobile = tall && !isMd;
+  const dominoOrder = puzzle.dominoes.map((_, i) => i);
+  const leftIdx = dominoOrder.slice(0, Math.ceil(dominoOrder.length / 2));
+  const rightIdx = dominoOrder.slice(Math.ceil(dominoOrder.length / 2));
 
   // Stacked layout (board above the tray) sizes the board purely from its
   // width by default, which leaves cells small on a tall phone screen even
@@ -681,6 +737,26 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
 
   const prior = hydrated ? getResult(date, level) : null;
 
+  const boardStage = (
+    <FitStage aspect={(cols + 1.4) / (rows + 1.4)} maxHeight={heightBudget} onBlank={clearSel}>
+      <PipsBoard
+        puzzle={puzzle}
+        state={state}
+        statuses={ev.regions}
+        sel={sel}
+        hold={sel?.kind === "tray" && !state[sel.d] ? sel.d : null}
+        holdEnd={sel?.kind === "tray" ? sel.end : 0}
+        pending={
+          anchor && sel?.kind === "tray"
+            ? { cell: anchor.cell, pip: puzzle.dominoes[sel.d][sel.end] }
+            : null
+        }
+        onCell={onCell}
+        onBackground={clearSel}
+      />
+    </FitStage>
+  );
+
   return (
     <Shell wide={sideTray}>
       <h1 className="font-display mt-7 text-[1.45rem] font-semibold tracking-tight">{dateLabel}</h1>
@@ -763,88 +839,97 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
         </div>
       ) : null}
 
-      <div className={cn("mt-3 flex gap-5", sideTray ? "flex-row items-start" : "flex-col")}>
-      <div
-        ref={boardHostRef}
-        className={cn(
-          sideTray ? "min-w-0 flex-1" : "w-full",
-          // A wide puzzle (e.g. a 9-column hard board) is width-bound on a
-          // narrow phone; reclaim the page's own edge padding for the board
-          // specifically, since it needs the room more than the margin does.
-          // `w-full` alone would keep the negative margin from actually
-          // widening the box (100% is relative to the padded parent), so
-          // the bled width has to be set explicitly too.
-          !sideTray && "-mx-4 w-[calc(100%+2rem)] sm:mx-0 sm:w-full",
-        )}
-        onPointerUp={(e) => {
-          if (e.button !== 0) return;
-          if (e.target === e.currentTarget) clearSel();
-        }}
-      >
-          <FitStage aspect={(cols + 1.4) / (rows + 1.4)} maxHeight={heightBudget} onBlank={clearSel}>
-          <PipsBoard
-            puzzle={puzzle}
-            state={state}
-            statuses={ev.regions}
-            sel={sel}
-            hold={sel?.kind === "tray" && !state[sel.d] ? sel.d : null}
-            holdEnd={sel?.kind === "tray" ? sel.end : 0}
-            pending={
-              anchor && sel?.kind === "tray"
-                ? {
-                    cell: anchor.cell,
-                    pip: puzzle.dominoes[sel.d][sel.end],
-                  }
-                : null
-            }
-            onCell={onCell}
-            onBackground={clearSel}
-          />
-        </FitStage>
-        </div>
-
-        <div ref={belowRef} className={cn("min-w-0 shrink-0", sideTray ? "w-[14.5rem]" : "w-full")}>
-          <p className="min-h-[1.4em] text-sm text-muted-foreground">{hint}</p>
-          <PipsTray
-            dominoes={puzzle.dominoes}
-            placed={state.map(Boolean)}
-            selected={sel?.kind === "tray" || sel?.kind === "board" ? sel.d : null}
-            selectedEnd={sel?.kind === "tray" || sel?.kind === "board" ? sel.end : null}
-            disabled={solvedFlag}
-            onPick={pick}
-            side={sideTray}
-          />
-          <div className="mt-4 flex items-center justify-between">
-            <span className="text-sm text-muted-foreground" aria-live="polite">
-              {ev.placed} / {ev.total} placed
-            </span>
-            <div className="flex items-center gap-1">
-              <Button variant="ghost" size="sm" onClick={undo} disabled={!canUndo || solvedFlag}>
-                Undo
-              </Button>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="ghost" size="sm">
-                    Clear board
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogTitle>Clear the board?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Every placed domino comes off. The clock keeps running.
-                  </AlertDialogDescription>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction destructive onClick={doReset}>
-                      Clear board
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+      {flankMobile ? (
+        <>
+          <div className="mt-3 flex flex-row items-start gap-2">
+            <PipsTray
+              dominoes={puzzle.dominoes}
+              placed={state.map(Boolean)}
+              selected={sel?.kind === "tray" || sel?.kind === "board" ? sel.d : null}
+              selectedEnd={sel?.kind === "tray" || sel?.kind === "board" ? sel.end : null}
+              disabled={solvedFlag}
+              onPick={pick}
+              vertical
+              indices={leftIdx}
+            />
+            <div
+              ref={boardHostRef}
+              className="min-w-0 flex-1"
+              onPointerUp={(e) => {
+                if (e.button !== 0) return;
+                if (e.target === e.currentTarget) clearSel();
+              }}
+            >
+              {boardStage}
             </div>
+            <PipsTray
+              dominoes={puzzle.dominoes}
+              placed={state.map(Boolean)}
+              selected={sel?.kind === "tray" || sel?.kind === "board" ? sel.d : null}
+              selectedEnd={sel?.kind === "tray" || sel?.kind === "board" ? sel.end : null}
+              disabled={solvedFlag}
+              onPick={pick}
+              vertical
+              indices={rightIdx}
+            />
+          </div>
+
+          <div ref={belowRef} className="w-full">
+            <p className="mt-3 min-h-[1.4em] text-sm text-muted-foreground">{hint}</p>
+            <BoardControls
+              placed={ev.placed}
+              total={ev.total}
+              canUndo={canUndo}
+              onUndo={undo}
+              onReset={doReset}
+              disabled={solvedFlag}
+            />
+          </div>
+        </>
+      ) : (
+        <div className={cn("mt-3 flex gap-5", sideTray ? "flex-row items-start" : "flex-col")}>
+          <div
+            ref={boardHostRef}
+            className={cn(
+              sideTray ? "min-w-0 flex-1" : "w-full",
+              // A wide puzzle (e.g. a 9-column hard board) is width-bound on a
+              // narrow phone; reclaim the page's own edge padding for the board
+              // specifically, since it needs the room more than the margin does.
+              // `w-full` alone would keep the negative margin from actually
+              // widening the box (100% is relative to the padded parent), so
+              // the bled width has to be set explicitly too.
+              !sideTray && "-mx-4 w-[calc(100%+2rem)] sm:mx-0 sm:w-full",
+            )}
+            onPointerUp={(e) => {
+              if (e.button !== 0) return;
+              if (e.target === e.currentTarget) clearSel();
+            }}
+          >
+            {boardStage}
+          </div>
+
+          <div ref={belowRef} className={cn("min-w-0 shrink-0", sideTray ? "w-[14.5rem]" : "w-full")}>
+            <p className="min-h-[1.4em] text-sm text-muted-foreground">{hint}</p>
+            <PipsTray
+              dominoes={puzzle.dominoes}
+              placed={state.map(Boolean)}
+              selected={sel?.kind === "tray" || sel?.kind === "board" ? sel.d : null}
+              selectedEnd={sel?.kind === "tray" || sel?.kind === "board" ? sel.end : null}
+              disabled={solvedFlag}
+              onPick={pick}
+              side={sideTray}
+            />
+            <BoardControls
+              placed={ev.placed}
+              total={ev.total}
+              canUndo={canUndo}
+              onUndo={undo}
+              onReset={doReset}
+              disabled={solvedFlag}
+            />
           </div>
         </div>
-      </div>
+      )}
     </Shell>
   );
 }
