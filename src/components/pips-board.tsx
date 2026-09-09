@@ -2,6 +2,7 @@ import { useId, useRef, useState } from "react";
 import type { Cell, GameState, Puzzle, RegionStatus } from "@/lib/pips/engine";
 import { key, labelText, occupancy, regionDescription, snapPlacement } from "@/lib/pips/engine";
 import { colorRegions, swatchFor, type Swatch } from "@/lib/pips/colors";
+import type { BoardOrientation } from "@/lib/pips/layout";
 import {
   BOARD,
   PIP_LAYOUT,
@@ -28,21 +29,27 @@ type Props = {
   hold?: number | null;
   holdEnd?: 0 | 1;
   pending?: { cell: Cell; pip: number } | null;
+  orientation?: BoardOrientation;
   onCell: (cell: Cell) => void;
   onBackground: () => void;
 };
 
 function cellAtPointer(
-  svg: SVGSVGElement,
+  space: SVGGraphicsElement | null,
   clientX: number,
   clientY: number,
-  vb: { x: number; y: number; w: number; h: number },
-): Cell {
-  const rect = svg.getBoundingClientRect();
-  const scale = Math.min(rect.width / vb.w, rect.height / vb.h);
-  const ox = rect.left + (rect.width - vb.w * scale) / 2;
-  const oy = rect.top + (rect.height - vb.h * scale) / 2;
-  return [Math.floor((clientY - oy) / scale + vb.y), Math.floor((clientX - ox) / scale + vb.x)];
+): Cell | null {
+  // Convert through the board group's actual screen matrix instead of
+  // manually recreating preserveAspectRatio math. Besides being more exact,
+  // this also inverts the optional quarter-turn used for wide mobile boards.
+  const svg = space?.ownerSVGElement;
+  const matrix = space?.getScreenCTM();
+  if (!svg || !matrix) return null;
+  const point = svg.createSVGPoint();
+  point.x = clientX;
+  point.y = clientY;
+  const local = point.matrixTransform(matrix.inverse());
+  return [Math.floor(local.y), Math.floor(local.x)];
 }
 
 function Pips({ x, y, v, ghost = false }: { x: number; y: number; v: number; ghost?: boolean }) {
@@ -108,9 +115,23 @@ function Tile({
         strokeDasharray={ghost ? "0.12 0.08" : undefined}
       />
       {horiz ? (
-        <line x1={mx} y1={y + 0.12} x2={mx} y2={y + h - 0.12} className="stroke-foreground/30" strokeWidth={0.03} />
+        <line
+          x1={mx}
+          y1={y + 0.12}
+          x2={mx}
+          y2={y + h - 0.12}
+          className="stroke-foreground/30"
+          strokeWidth={0.03}
+        />
       ) : (
-        <line x1={x + 0.12} y1={my} x2={x + w - 0.12} y2={my} className="stroke-foreground/30" strokeWidth={0.03} />
+        <line
+          x1={x + 0.12}
+          y1={my}
+          x2={x + w - 0.12}
+          y2={my}
+          className="stroke-foreground/30"
+          strokeWidth={0.03}
+        />
       )}
       <Pips x={col1} y={r1} v={a} ghost={ghost} />
       <Pips x={col2} y={r2} v={b} ghost={ghost} />
@@ -148,6 +169,7 @@ function Badge({
   swatch,
   status,
   filterId,
+  counterRotate,
 }: {
   x: number;
   y: number;
@@ -156,6 +178,7 @@ function Badge({
   swatch: Swatch;
   status: RegionStatus;
   filterId: string;
+  counterRotate?: boolean;
 }) {
   const s = Math.max(0.7, 0.5 + 0.11 * text.length);
   return (
@@ -163,7 +186,7 @@ function Badge({
     // the corner anchor, so it stays tucked into the same spot while
     // covering less of the tile's pips.
     <g
-      transform={`translate(${x},${y}) scale(${BADGE_SCALE})`}
+      transform={`translate(${x},${y}) ${counterRotate ? "rotate(-90) " : ""}scale(${BADGE_SCALE})`}
       className="pointer-events-none"
     >
       <rect
@@ -201,6 +224,7 @@ export function PipsBoard({
   hold,
   holdEnd = 0,
   pending,
+  orientation = "natural",
   onCell,
   onBackground,
 }: Props) {
@@ -213,18 +237,24 @@ export function PipsBoard({
   const vbY = b.minR - pad;
   const vbW = b.maxC + 1 - b.minC + pad * 2;
   const vbH = b.maxR + 1 - b.minR + pad * 2;
-  const vb = { x: vbX, y: vbY, w: vbW, h: vbH };
+  const turned = orientation === "clockwise";
+  const displayViewBox = turned ? `0 0 ${vbH} ${vbW}` : `${vbX} ${vbY} ${vbW} ${vbH}`;
+  const boardTransform = turned
+    ? `translate(${vbH} 0) rotate(90) translate(${-vbX} ${-vbY})`
+    : undefined;
   const [hover, setHover] = useState<Cell | null>(null);
   const drag = useRef<{ id: number; x: number; y: number; holding: boolean } | null>(null);
+  const boardSpace = useRef<SVGGElement>(null);
   const snap =
     hold != null && hover
       ? snapPlacement(puzzle, state, hold, hover, pending?.cell ?? null, holdEnd)
       : null;
-  const ghost = hold != null ? snap?.[hold] ?? null : null;
+  const ghost = hold != null ? (snap?.[hold] ?? null) : null;
   const ghostOcc = snap ? occupancy(puzzle, snap) : null;
 
-  const cellFrom = (svg: SVGSVGElement, clientX: number, clientY: number) => {
-    const cell = cellAtPointer(svg, clientX, clientY, vb);
+  const cellFrom = (_svg: SVGSVGElement, clientX: number, clientY: number) => {
+    const cell = cellAtPointer(boardSpace.current, clientX, clientY);
+    if (!cell) return null;
     return puzzle.cells.has(key(...cell)) ? cell : null;
   };
 
@@ -243,7 +273,7 @@ export function PipsBoard({
 
   return (
     <svg
-      viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}
+      viewBox={displayViewBox}
       preserveAspectRatio="xMidYMid meet"
       className="board-svg select-none"
       role="img"
@@ -308,102 +338,113 @@ export function PipsBoard({
           patternTransform="rotate(45)"
           patternUnits="userSpaceOnUse"
         >
-          <line x1={0} y1={0} x2={0} y2={0.16} stroke="var(--color-bad-ink)" strokeWidth={0.05} strokeOpacity={0.5} />
+          <line
+            x1={0}
+            y1={0}
+            x2={0}
+            y2={0.16}
+            stroke="var(--color-bad-ink)"
+            strokeWidth={0.05}
+            strokeOpacity={0.5}
+          />
         </pattern>
       </defs>
 
-      <rect
-        x={vbX}
-        y={vbY}
-        width={vbW}
-        height={vbH}
-        fill="var(--color-grout)"
-        pointerEvents="all"
-      />
-
-      {puzzle.regions.map((reg, i) => {
-        const sw = swatchFor(assigned, i);
-        const st = statuses[i];
-        let fill = sw.fill;
-        if (st === "violated") fill = `color-mix(in oklab, #e8b0a8 45%, ${sw.fill})`;
-        const d = unionPath(reg.cells, BOARD.radius, BOARD.inset);
-        const divs = regionDividers(reg.cells, BOARD.inset, BOARD.dividerPad);
-        return (
-          <g key={`r${i}`} className="pointer-events-none" filter={`url(#${uid}-shadow)`}>
-            <path
-              d={d}
-              fill={fill}
-              stroke={sw.dash}
-              strokeWidth={BOARD.stroke}
-              strokeDasharray={BOARD.dash}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            {st === "violated" && <path d={d} fill={`url(#${uid}-hatch)`} />}
-            {divs.map((s, j) => (
-              <line
-                key={j}
-                x1={s.x1}
-                y1={s.y1}
-                x2={s.x2}
-                y2={s.y2}
-                stroke={sw.dash}
-                strokeWidth={BOARD.innerStroke}
-                strokeDasharray={BOARD.innerDash}
-                strokeLinecap="round"
-              />
-            ))}
-          </g>
-        );
-      })}
-
-      {state.map((p, d) => {
-        if (!p) return null;
-        const [a, bPip] = puzzle.dominoes[d];
-        return (
-          <Tile
-            key={`t${d}`}
-            c1={p.cells[0]}
-            c2={p.cells[1]}
-            a={a}
-            b={bPip}
-            selected={sel?.kind === "board" && sel.d === d}
-          />
-        );
-      })}
-
-      {ghost && ghostOcc ? (
-        <Tile
-          c1={ghost.cells[0]}
-          c2={ghost.cells[1]}
-          a={ghostOcc.get(key(...ghost.cells[0]))?.pip ?? puzzle.dominoes[hold!][0]}
-          b={ghostOcc.get(key(...ghost.cells[1]))?.pip ?? puzzle.dominoes[hold!][1]}
-          ghost
+      <g ref={boardSpace} transform={boardTransform}>
+        <rect
+          x={vbX}
+          y={vbY}
+          width={vbW}
+          height={vbH}
+          fill="var(--color-grout)"
+          pointerEvents="all"
         />
-      ) : hover && hold != null && !pending ? (
-        <HalfTile cell={hover} pip={puzzle.dominoes[hold][holdEnd]} />
-      ) : pending ? (
-        <HalfTile cell={pending.cell} pip={pending.pip} />
-      ) : null}
 
-      {puzzle.regions.map((reg, i) => {
-        const t = labelText(reg);
-        if (!t) return null;
-        const sw = swatchFor(assigned, i);
-        const pos = badgeAnchor(reg);
-        return (
-          <Badge
-            key={`b${i}`}
-            x={pos.x}
-            y={pos.y}
-            text={t}
-            description={regionDescription(reg)}
-            swatch={sw}
-            status={statuses[i]}
-            filterId={`${uid}-badge`}
+        {puzzle.regions.map((reg, i) => {
+          const sw = swatchFor(assigned, i);
+          const st = statuses[i];
+          let fill = sw.fill;
+          if (st === "violated") fill = `color-mix(in oklab, #e8b0a8 45%, ${sw.fill})`;
+          const d = unionPath(reg.cells, BOARD.radius, BOARD.inset);
+          const divs = regionDividers(reg.cells, BOARD.inset, BOARD.dividerPad);
+          return (
+            <g key={`r${i}`} className="pointer-events-none" filter={`url(#${uid}-shadow)`}>
+              <path
+                d={d}
+                fill={fill}
+                stroke={sw.dash}
+                strokeWidth={BOARD.stroke}
+                strokeDasharray={BOARD.dash}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              {st === "violated" && <path d={d} fill={`url(#${uid}-hatch)`} />}
+              {divs.map((s, j) => (
+                <line
+                  key={j}
+                  x1={s.x1}
+                  y1={s.y1}
+                  x2={s.x2}
+                  y2={s.y2}
+                  stroke={sw.dash}
+                  strokeWidth={BOARD.innerStroke}
+                  strokeDasharray={BOARD.innerDash}
+                  strokeLinecap="round"
+                />
+              ))}
+            </g>
+          );
+        })}
+
+        {state.map((p, d) => {
+          if (!p) return null;
+          const [a, bPip] = puzzle.dominoes[d];
+          return (
+            <Tile
+              key={`t${d}`}
+              c1={p.cells[0]}
+              c2={p.cells[1]}
+              a={a}
+              b={bPip}
+              selected={sel?.kind === "board" && sel.d === d}
+            />
+          );
+        })}
+
+        {ghost && ghostOcc ? (
+          <Tile
+            c1={ghost.cells[0]}
+            c2={ghost.cells[1]}
+            a={ghostOcc.get(key(...ghost.cells[0]))?.pip ?? puzzle.dominoes[hold!][0]}
+            b={ghostOcc.get(key(...ghost.cells[1]))?.pip ?? puzzle.dominoes[hold!][1]}
+            ghost
           />
-        );
-      })}
+        ) : hover && hold != null && !pending ? (
+          <HalfTile cell={hover} pip={puzzle.dominoes[hold][holdEnd]} />
+        ) : pending ? (
+          <HalfTile cell={pending.cell} pip={pending.pip} />
+        ) : null}
+
+        {puzzle.regions.map((reg, i) => {
+          const t = labelText(reg);
+          if (!t) return null;
+          const sw = swatchFor(assigned, i);
+          const pos = badgeAnchor(reg);
+          return (
+            <Badge
+              key={`b${i}`}
+              x={pos.x}
+              y={pos.y}
+              text={t}
+              description={regionDescription(reg)}
+              swatch={sw}
+              status={statuses[i]}
+              filterId={`${uid}-badge`}
+              counterRotate={turned}
+            />
+          );
+        })}
+      </g>
     </svg>
   );
 }
