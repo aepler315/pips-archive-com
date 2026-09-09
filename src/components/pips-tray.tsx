@@ -56,7 +56,11 @@ export function PipsTray({
       )}
     >
       {dominoes.map(([a, b], d) => {
-        const onBoard = placed[d] && selected !== d;
+        // A placed domino always reads as "on the board" in the tray, even
+        // while it's selected there (to move/rotate it) — re-lighting the
+        // slot made it look like a second, available copy of that domino.
+        const onBoard = placed[d];
+        const isSel = selected === d && !onBoard;
         const suffix = onBoard ? ", on the board — tap to pick it up" : "";
         return (
           <div
@@ -64,14 +68,14 @@ export function PipsTray({
             className={cn(
               "relative min-h-[2.75rem] rounded-[var(--radius-md)] p-1.5",
               onBoard && "opacity-55",
-              selected === d && "bg-muted",
+              isSel && "bg-muted",
             )}
           >
-            <MiniTile a={a} b={b} end={selected === d ? (selectedEnd ?? null) : null} />
+            <MiniTile a={a} b={b} end={isSel ? (selectedEnd ?? null) : null} />
             <button
               type="button"
               aria-label={`Domino ${a}-${b}, ${a} pip${suffix}`}
-              aria-pressed={selected === d && selectedEnd === 0}
+              aria-pressed={isSel && selectedEnd === 0}
               disabled={disabled}
               onClick={() => onPick(d, 0)}
               className="absolute inset-y-0 left-0 w-1/2 rounded-[var(--radius-md)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -79,7 +83,7 @@ export function PipsTray({
             <button
               type="button"
               aria-label={`Domino ${a}-${b}, ${b} pip${suffix}`}
-              aria-pressed={selected === d && selectedEnd === 1}
+              aria-pressed={isSel && selectedEnd === 1}
               disabled={disabled}
               onClick={() => onPick(d, 1)}
               className="absolute inset-y-0 right-0 w-1/2 rounded-[var(--radius-md)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
