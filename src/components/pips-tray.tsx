@@ -74,7 +74,7 @@ export function PipsTray({
               aria-pressed={selected === d && selectedEnd === 0}
               disabled={disabled}
               onClick={() => onPick(d, 0)}
-              className="absolute inset-y-0 left-0 w-1/2 rounded-l-[var(--radius-md)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="absolute inset-y-0 left-0 w-1/2 rounded-[var(--radius-md)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
             <button
               type="button"
@@ -82,7 +82,7 @@ export function PipsTray({
               aria-pressed={selected === d && selectedEnd === 1}
               disabled={disabled}
               onClick={() => onPick(d, 1)}
-              className="absolute inset-y-0 right-0 w-1/2 rounded-r-[var(--radius-md)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="absolute inset-y-0 right-0 w-1/2 rounded-[var(--radius-md)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
           </div>
         );
