@@ -258,11 +258,16 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     };
   }, []);
   const sideTray = tall && isMd;
-  // A tall puzzle on a narrow phone is height-bound, not width-bound (see
-  // heightBudget below): the board ends up with lots of unused margin on
-  // both sides. Put the tray there instead of below, split into two
-  // portrait-tile columns flanking the board.
-  const flankMobile = tall && !isMd;
+  // A narrow (portrait-shaped) puzzle on a phone is height-bound, not
+  // width-bound (see heightBudget below): the board ends up with lots of
+  // unused margin on both sides. Put the tray there instead of below, split
+  // into two portrait-tile columns flanking the board. Row count alone
+  // (part of `tall`, above) isn't enough here — a tall-but-wide puzzle (e.g.
+  // 9x9) is still width-bound on a phone and has no side margin to give the
+  // tray, so it would just squeeze the board narrower for two dangling
+  // columns of dominoes with nothing to flank.
+  const narrow = rows / Math.max(cols, 1) >= 1.25;
+  const flankMobile = narrow && !isMd;
   const dominoOrder = puzzle.dominoes.map((_, i) => i);
   const leftIdx = dominoOrder.slice(0, Math.ceil(dominoOrder.length / 2));
   const rightIdx = dominoOrder.slice(Math.ceil(dominoOrder.length / 2));
