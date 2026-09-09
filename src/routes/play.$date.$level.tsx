@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 // there (its client-only work never executes during a prerender pass).
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { TriangleAlert } from "lucide-react";
+import { RotateCw, TriangleAlert } from "lucide-react";
 import { PipsBoard } from "@/components/pips-board";
 import { PipsTray } from "@/components/pips-tray";
 import { SiteHeader } from "@/components/site-header";
@@ -47,6 +47,7 @@ import {
 import { cn } from "@/lib/utils";
 import { loadDay } from "@/lib/pips/days";
 import { boundsOf, puzzleCells } from "@/lib/pips/geometry";
+import { displayedGrid, mobileBoardMaxHeight, mobileBoardOrientation } from "@/lib/pips/layout";
 
 export const Route = createFileRoute("/play/$date/$level")({
   loader: async ({ params }) => {
@@ -104,7 +105,12 @@ function PlayPage() {
 
 function Shell({ children, wide }: { children: ReactNode; wide?: boolean }) {
   return (
-    <div className={cn("mx-auto flex min-h-dvh flex-col px-4 py-5 sm:px-6", wide ? "max-w-[980px]" : "max-w-[720px]")}>
+    <div
+      className={cn(
+        "mx-auto flex min-h-dvh flex-col px-4 py-5 sm:px-6",
+        wide ? "max-w-[980px]" : "max-w-[720px]",
+      )}
+    >
       <SiteHeader current="play" />
       {children}
     </div>
@@ -179,6 +185,7 @@ function BoardControls({
   onUndo,
   onReset,
   disabled,
+  compact,
 }: {
   placed: number;
   total: number;
@@ -186,9 +193,10 @@ function BoardControls({
   onUndo: () => void;
   onReset: () => void;
   disabled?: boolean;
+  compact?: boolean;
 }) {
   return (
-    <div className="mt-4 flex items-center justify-between">
+    <div className={cn(compact ? "mt-1" : "mt-4", "flex items-center justify-between")}>
       <span className="text-sm text-muted-foreground" aria-live="polite">
         {placed} / {total} placed
       </span>
@@ -238,6 +246,8 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const tall = rows >= 6 || rows / Math.max(cols, 1) >= 1.25;
   const [isMd, setIsMd] = useState(false);
   const [mousey, setMousey] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState(720);
+  const [showOriginal, setShowOriginal] = useState(false);
   // useLayoutEffect (not useEffect) so this resolves before the browser
   // paints: the prerendered/SSR markup always starts from `false` (no
   // `window`), and updating after paint would flash "Tap" before it
@@ -248,58 +258,26 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     const go = () => {
       setIsMd(wide.matches);
       setMousey(hover.matches);
+      setViewportHeight(window.visualViewport?.height ?? window.innerHeight);
     };
     go();
     wide.addEventListener("change", go);
     hover.addEventListener("change", go);
+    window.addEventListener("resize", go);
+    window.visualViewport?.addEventListener("resize", go);
     return () => {
       wide.removeEventListener("change", go);
       hover.removeEventListener("change", go);
+      window.removeEventListener("resize", go);
+      window.visualViewport?.removeEventListener("resize", go);
     };
   }, []);
   const sideTray = tall && isMd;
-  // A narrow (portrait-shaped) puzzle on a phone is height-bound, not
-  // width-bound (see heightBudget below): the board ends up with lots of
-  // unused margin on both sides. Put the tray there instead of below, split
-  // into two portrait-tile columns flanking the board. Row count alone
-  // (part of `tall`, above) isn't enough here — a tall-but-wide puzzle (e.g.
-  // 9x9) is still width-bound on a phone and has no side margin to give the
-  // tray, so it would just squeeze the board narrower for two dangling
-  // columns of dominoes with nothing to flank.
-  const narrow = rows / Math.max(cols, 1) >= 1.25;
-  const flankMobile = narrow && !isMd;
-  const dominoOrder = puzzle.dominoes.map((_, i) => i);
-  const leftIdx = dominoOrder.slice(0, Math.ceil(dominoOrder.length / 2));
-  const rightIdx = dominoOrder.slice(Math.ceil(dominoOrder.length / 2));
-
-  // Stacked layout (board above the tray) sizes the board purely from its
-  // width by default, which leaves cells small on a tall phone screen even
-  // when there's plenty of vertical room below the fold. Give it a real
-  // height budget: viewport height minus whatever sits above the board and
-  // whatever the tray section below it needs.
-  const boardHostRef = useRef<HTMLDivElement>(null);
-  const belowRef = useRef<HTMLDivElement>(null);
-  const [heightBudget, setHeightBudget] = useState<number | null>(null);
-  useEffect(() => {
-    if (sideTray) {
-      setHeightBudget(null);
-      return;
-    }
-    const recompute = () => {
-      const top = boardHostRef.current?.getBoundingClientRect().top ?? 0;
-      const below = belowRef.current?.getBoundingClientRect().height ?? 0;
-      const budget = window.innerHeight - top - below - 24;
-      setHeightBudget(budget > 160 ? budget : null);
-    };
-    recompute();
-    window.addEventListener("resize", recompute);
-    const ro = new ResizeObserver(recompute);
-    if (belowRef.current) ro.observe(belowRef.current);
-    return () => {
-      window.removeEventListener("resize", recompute);
-      ro.disconnect();
-    };
-  }, [sideTray]);
+  const preferredOrientation = mobileBoardOrientation(rows, cols);
+  const canTurnToFit = preferredOrientation === "clockwise";
+  const orientation = !isMd && canTurnToFit && !showOriginal ? "clockwise" : "natural";
+  const displayed = displayedGrid(rows, cols, orientation);
+  const boardHeightLimit = isMd ? null : mobileBoardMaxHeight(viewportHeight, displayed.rows);
 
   // Always starts empty — matching exactly what the prerendered/SSR markup
   // shows, since the server never has access to localStorage. A saved board
@@ -486,7 +464,9 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
       holdAnchor(null);
       const res = recordSolve(date, level, ms);
       setSolveMs(ms);
-      setSolveDetail(res.plays > 1 ? `Best ${fmt(res.best)} over ${res.plays} plays.` : "First solve.");
+      setSolveDetail(
+        res.plays > 1 ? `Best ${fmt(res.best)} over ${res.plays} plays.` : "First solve.",
+      );
     }
   }, [ev.solved, date, level]);
 
@@ -624,9 +604,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     if (solvedFlag) return;
     const st = stateRef.current;
     const curSel = selRef.current;
-    const occupiedBy = st.findIndex(
-      (p) => p && p.cells.some((c) => key(...c) === key(...cell)),
-    );
+    const occupiedBy = st.findIndex((p) => p && p.cells.some((c) => key(...c) === key(...cell)));
 
     if (occupiedBy >= 0) {
       const placed = st[occupiedBy]!;
@@ -743,12 +721,17 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const prior = hydrated ? getResult(date, level) : null;
 
   const boardStage = (
-    <FitStage aspect={(cols + 1.4) / (rows + 1.4)} maxHeight={heightBudget} onBlank={clearSel}>
+    <FitStage
+      aspect={(displayed.cols + 1.4) / (displayed.rows + 1.4)}
+      maxHeight={boardHeightLimit}
+      onBlank={clearSel}
+    >
       <PipsBoard
         puzzle={puzzle}
         state={state}
         statuses={ev.regions}
         sel={sel}
+        orientation={orientation}
         hold={sel?.kind === "tray" && !state[sel.d] ? sel.d : null}
         holdEnd={sel?.kind === "tray" ? sel.end : 0}
         pending={
@@ -844,77 +827,57 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
         </div>
       ) : null}
 
-      {flankMobile ? (
-        <>
-          <div className="mt-3 flex flex-row items-start gap-2">
-            <PipsTray
-              dominoes={puzzle.dominoes}
-              placed={state.map(Boolean)}
-              selected={sel?.kind === "tray" || sel?.kind === "board" ? sel.d : null}
-              selectedEnd={sel?.kind === "tray" || sel?.kind === "board" ? sel.end : null}
-              disabled={solvedFlag}
-              onPick={pick}
-              vertical
-              indices={leftIdx}
-            />
-            <div
-              ref={boardHostRef}
-              className="min-w-0 flex-1"
-              onPointerUp={(e) => {
-                if (e.button !== 0) return;
-                if (e.target === e.currentTarget) clearSel();
-              }}
-            >
-              {boardStage}
-            </div>
-            <PipsTray
-              dominoes={puzzle.dominoes}
-              placed={state.map(Boolean)}
-              selected={sel?.kind === "tray" || sel?.kind === "board" ? sel.d : null}
-              selectedEnd={sel?.kind === "tray" || sel?.kind === "board" ? sel.end : null}
-              disabled={solvedFlag}
-              onPick={pick}
-              vertical
-              indices={rightIdx}
-            />
-          </div>
-
-          <div ref={belowRef} className="w-full">
-            <p className="mt-3 min-h-[1.4em] text-sm text-muted-foreground">{hint}</p>
-            <BoardControls
-              placed={ev.placed}
-              total={ev.total}
-              canUndo={canUndo}
-              onUndo={undo}
-              onReset={doReset}
-              disabled={solvedFlag}
-            />
-          </div>
-        </>
-      ) : (
-        <div className={cn("mt-3 flex gap-5", sideTray ? "flex-row items-start" : "flex-col")}>
-          <div
-            ref={boardHostRef}
-            className={cn(
-              sideTray ? "min-w-0 flex-1" : "w-full",
-              // A wide puzzle (e.g. a 9-column hard board) is width-bound on a
-              // narrow phone; reclaim the page's own edge padding for the board
-              // specifically, since it needs the room more than the margin does.
-              // `w-full` alone would keep the negative margin from actually
-              // widening the box (100% is relative to the padded parent), so
-              // the bled width has to be set explicitly too.
-              !sideTray && "-mx-4 w-[calc(100%+2rem)] sm:mx-0 sm:w-full",
-            )}
-            onPointerUp={(e) => {
-              if (e.button !== 0) return;
-              if (e.target === e.currentTarget) clearSel();
-            }}
+      {canTurnToFit && !isMd ? (
+        <div className="mt-1 flex justify-center">
+          <button
+            type="button"
+            aria-pressed={orientation === "clockwise"}
+            onClick={() => setShowOriginal((shown) => !shown)}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
           >
-            {boardStage}
-          </div>
+            <RotateCw className="size-3.5" aria-hidden="true" />
+            {orientation === "clockwise"
+              ? "Turned to fit · Show original"
+              : "Original view · Turn to fit"}
+          </button>
+        </div>
+      ) : null}
 
-          <div ref={belowRef} className={cn("min-w-0 shrink-0", sideTray ? "w-[14.5rem]" : "w-full")}>
-            <p className="min-h-[1.4em] text-sm text-muted-foreground">{hint}</p>
+      <div className={cn("mt-3 flex gap-5", sideTray ? "flex-row items-start" : "flex-col")}>
+        <div
+          className={cn(
+            sideTray ? "min-w-0 flex-1" : "w-full",
+            // Let the puzzle, not the page gutter, own the scarce width on a
+            // phone. A wide board may already have been quarter-turned above.
+            !sideTray && "-mx-4 w-[calc(100%+2rem)] sm:mx-0 sm:w-full",
+          )}
+          onPointerUp={(e) => {
+            if (e.button !== 0) return;
+            if (e.target === e.currentTarget) clearSel();
+          }}
+        >
+          {boardStage}
+        </div>
+
+        <div
+          className={cn(
+            "min-w-0 shrink-0",
+            sideTray
+              ? "w-[14.5rem]"
+              : isMd
+                ? "w-full"
+                : "fixed inset-x-0 bottom-0 z-20 border-t border-border/80 bg-background/95 px-4 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-10px_30px_rgba(28,25,23,0.10)] backdrop-blur-md",
+          )}
+        >
+          <div className={cn(!sideTray && !isMd && "mx-auto w-full max-w-[720px]")}>
+            <p
+              className={cn(
+                "text-muted-foreground",
+                !sideTray && !isMd ? "min-h-[1.1rem] truncate text-xs" : "min-h-[1.4em] text-sm",
+              )}
+            >
+              {hint}
+            </p>
             <PipsTray
               dominoes={puzzle.dominoes}
               placed={state.map(Boolean)}
@@ -923,6 +886,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
               disabled={solvedFlag}
               onPick={pick}
               side={sideTray}
+              rail={!sideTray && !isMd}
             />
             <BoardControls
               placed={ev.placed}
@@ -931,10 +895,13 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
               onUndo={undo}
               onReset={doReset}
               disabled={solvedFlag}
+              compact={!sideTray && !isMd}
             />
           </div>
         </div>
-      )}
+      </div>
+
+      {!sideTray && !isMd ? <div className="h-[7.75rem]" aria-hidden="true" /> : null}
     </Shell>
   );
 }

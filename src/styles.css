@@ -77,3 +77,18 @@
   height: 100%;
   touch-action: none;
 }
+
+.tile-rail {
+  scrollbar-width: none;
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 0.75rem,
+    black calc(100% - 0.75rem),
+    transparent
+  );
+}
+
+.tile-rail::-webkit-scrollbar {
+  display: none;
+}
