@@ -14,6 +14,12 @@ import {
 
 type Sel = { kind: "tray" | "board"; d: number } | null;
 
+// Uniform shrink for constraint badges. At 1 they span a full cell
+// diagonally and sit on the corner pip; scaled down they clear it
+// (pips sit 0.28 units in from the badge anchor, the scaled diamond
+// only reaches ~0.15).
+const BADGE_SCALE = 0.78;
+
 type Props = {
   puzzle: Puzzle;
   state: GameState;
@@ -153,7 +159,13 @@ function Badge({
 }) {
   const s = Math.max(0.7, 0.5 + 0.11 * text.length);
   return (
-    <g transform={`translate(${x},${y})`} className="pointer-events-none">
+    // Shrunken as a whole (diamond, stroke and text scale together) around
+    // the corner anchor, so it stays tucked into the same spot while
+    // covering less of the tile's pips.
+    <g
+      transform={`translate(${x},${y}) scale(${BADGE_SCALE})`}
+      className="pointer-events-none"
+    >
       <rect
         x={-s / 2}
         y={-s / 2}
