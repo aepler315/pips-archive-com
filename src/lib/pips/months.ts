@@ -1,3 +1,4 @@
+import type { Level } from "./engine";
 import type { IndexEntry } from "./types";
 
 export type MonthGroup = { month: string; days: IndexEntry[] };
@@ -34,4 +35,21 @@ export function monthChip(ym: string) {
 export function resolveMonth(groups: MonthGroup[], requested?: string) {
   if (requested && groups.some((g) => g.month === requested)) return requested;
   return groups[0]?.month ?? "";
+}
+
+/**
+ * Progression after solving a puzzle: easy -> medium -> hard of the same
+ * day, then hard -> easy of the next archived day. `puzzles` must be sorted
+ * oldest-first (the order archive.json stores them in).
+ */
+export function nextPuzzleTarget(
+  puzzles: IndexEntry[],
+  date: string,
+  level: Level,
+): { date: string; level: Level } | null {
+  if (level === "easy") return { date, level: "medium" };
+  if (level === "medium") return { date, level: "hard" };
+  const i = puzzles.findIndex((p) => p.date === date);
+  const next = i >= 0 ? puzzles[i + 1] : undefined;
+  return next ? { date: next.date, level: "easy" } : null;
 }

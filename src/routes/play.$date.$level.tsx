@@ -8,7 +8,7 @@ import { RotateCw, TriangleAlert } from "lucide-react";
 import { PipsBoard } from "@/components/pips-board";
 import { PipsTray } from "@/components/pips-tray";
 import { SiteHeader } from "@/components/site-header";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,6 +48,9 @@ import { cn } from "@/lib/utils";
 import { loadDay } from "@/lib/pips/days";
 import { boundsOf, puzzleCells } from "@/lib/pips/geometry";
 import { displayedGrid, mobileBoardMaxHeight, mobileBoardOrientation } from "@/lib/pips/layout";
+import { nextPuzzleTarget } from "@/lib/pips/months";
+import type { ArchiveIndex } from "@/lib/pips/types";
+import archiveJson from "@/data/archive.json";
 
 export const Route = createFileRoute("/play/$date/$level")({
   loader: async ({ params }) => {
@@ -719,6 +722,10 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
             : "Tap a domino, or a placed one to move it.";
 
   const prior = hydrated ? getResult(date, level) : null;
+  const nextTarget = useMemo(
+    () => nextPuzzleTarget((archiveJson as ArchiveIndex).puzzles, date, level),
+    [date, level],
+  );
 
   const boardStage = (
     <FitStage
@@ -807,9 +814,20 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
             Solved in <strong className="text-xl tabular-nums">{fmt(solveMs)}</strong>{" "}
             <span>{solveDetail}</span>
           </div>
-          <Button variant="secondary" size="sm" onClick={share}>
-            {justCopied ? "Copied" : "Share"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" onClick={share}>
+              {justCopied ? "Copied" : "Share"}
+            </Button>
+            {nextTarget ? (
+              <Link
+                to="/play/$date/$level"
+                params={nextTarget}
+                className={cn(buttonVariants({ variant: "default", size: "sm" }), "no-underline")}
+              >
+                Next puzzle
+              </Link>
+            ) : null}
+          </div>
         </div>
       ) : prior && !getProgress(date, level) && !state.some(Boolean) ? (
         <p className="mb-2 text-sm text-muted-foreground">
