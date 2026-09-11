@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { PIP_LAYOUT } from "@/lib/pips/geometry";
 import { cn } from "@/lib/utils";
 
@@ -78,6 +78,20 @@ export function PipsTray({
 }: Props) {
   const tray = useRef<HTMLDivElement>(null);
 
+  // Available dominoes cluster together, lightest first; ones already on the
+  // board drop to the end instead of leaving gaps in the middle of the bank.
+  const order = useMemo(() => {
+    return dominoes
+      .map((_, d) => d)
+      .sort((x, y) => {
+        if (placed[x] !== placed[y]) return placed[x] ? 1 : -1;
+        const sx = dominoes[x][0] + dominoes[x][1];
+        const sy = dominoes[y][0] + dominoes[y][1];
+        return sx - sy || x - y;
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dominoes, placed.join(",")]);
+
   useEffect(() => {
     if (!rail || selected == null) return;
     const host = tray.current;
@@ -107,7 +121,8 @@ export function PipsTray({
             : "grid-cols-4 sm:grid-cols-5 md:grid-cols-7"),
       )}
     >
-      {dominoes.map(([a, b], d) => {
+      {order.map((d) => {
+        const [a, b] = dominoes[d];
         // A placed domino always reads as "on the board" in the tray, even
         // while it's selected there (to move/rotate it) — re-lighting the
         // slot made it look like a second, available copy of that domino.
