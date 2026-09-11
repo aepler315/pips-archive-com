@@ -78,13 +78,14 @@ export function PipsTray({
 }: Props) {
   const tray = useRef<HTMLDivElement>(null);
 
-  // Available dominoes cluster together, lightest first; ones already on the
-  // board drop to the end instead of leaving gaps in the middle of the bank.
+  // A domino leaves the bank entirely once it's on the board (tap it there
+  // to pick it back up) — the rest stay clustered together, lightest first,
+  // instead of leaving a dimmed gap behind.
   const order = useMemo(() => {
     return dominoes
       .map((_, d) => d)
+      .filter((d) => !placed[d])
       .sort((x, y) => {
-        if (placed[x] !== placed[y]) return placed[x] ? 1 : -1;
         const sx = dominoes[x][0] + dominoes[x][1];
         const sy = dominoes[y][0] + dominoes[y][1];
         return sx - sy || x - y;
@@ -114,7 +115,7 @@ export function PipsTray({
       className={cn(
         "grid gap-2",
         rail &&
-          "tile-rail -mx-3 grid-flow-col auto-cols-[5.25rem] scroll-px-3 overflow-x-auto overscroll-x-contain px-3 py-1 [scroll-snap-type:x_proximity] [touch-action:pan-x]",
+          "tile-rail -mx-3 grid-flow-col auto-cols-[5.25rem] scroll-px-3 overflow-x-auto overscroll-x-contain px-3 py-1 [scroll-snap-type:x_proximity] [touch-action:pan-x] [overflow-anchor:none]",
         !rail &&
           (side
             ? "grid-cols-4 sm:grid-cols-5 md:grid-cols-2"
@@ -123,12 +124,7 @@ export function PipsTray({
     >
       {order.map((d) => {
         const [a, b] = dominoes[d];
-        // A placed domino always reads as "on the board" in the tray, even
-        // while it's selected there (to move/rotate it) — re-lighting the
-        // slot made it look like a second, available copy of that domino.
-        const onBoard = placed[d];
-        const isSel = selected === d && !onBoard;
-        const suffix = onBoard ? ", on the board — tap to pick it up" : "";
+        const isSel = selected === d;
         return (
           <div
             key={d}
@@ -136,14 +132,13 @@ export function PipsTray({
             className={cn(
               "relative min-h-[2.75rem] rounded-[var(--radius-md)] p-1.5",
               rail && "snap-start",
-              onBoard && "opacity-55",
               isSel && "bg-muted",
             )}
           >
             <MiniTile a={a} b={b} end={isSel ? (selectedEnd ?? null) : null} />
             <button
               type="button"
-              aria-label={`Domino ${a}-${b}, ${a} pip${suffix}`}
+              aria-label={`Domino ${a}-${b}, ${a} pip`}
               aria-pressed={isSel && selectedEnd === 0}
               disabled={disabled}
               onClick={() => onPick(d, 0)}
@@ -153,7 +148,7 @@ export function PipsTray({
             />
             <button
               type="button"
-              aria-label={`Domino ${a}-${b}, ${b} pip${suffix}`}
+              aria-label={`Domino ${a}-${b}, ${b} pip`}
               aria-pressed={isSel && selectedEnd === 1}
               disabled={disabled}
               onClick={() => onPick(d, 1)}
