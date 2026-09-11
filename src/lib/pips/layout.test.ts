@@ -15,7 +15,7 @@ test("swaps display dimensions for a quarter turn", () => {
   assert.deepEqual(displayedGrid(10, 2, "natural"), { rows: 10, cols: 2 });
 });
 
-test("caps tall boards by both viewport and useful cell size", () => {
-  assert.equal(mobileBoardMaxHeight(1000, 4), 302);
-  assert.equal(mobileBoardMaxHeight(600, 10), 432);
+test("sizes board height off a comfortable cell size", () => {
+  assert.equal(mobileBoardMaxHeight(4), 302);
+  assert.equal(mobileBoardMaxHeight(10), 638);
 });
