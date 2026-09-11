@@ -178,7 +178,7 @@ function Home() {
         </div>
 
         <div className="tile-rail mb-2 flex gap-1 overflow-x-auto pb-1 sm:mb-3">
-          {monthKeys.map((m) => (
+          {[...monthKeys].reverse().map((m) => (
             <Link
               key={m}
               to="/"
