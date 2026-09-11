@@ -249,7 +249,6 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const tall = rows >= 6 || rows / Math.max(cols, 1) >= 1.25;
   const [isMd, setIsMd] = useState(false);
   const [mousey, setMousey] = useState(false);
-  const [viewportHeight, setViewportHeight] = useState(720);
   const [showOriginal, setShowOriginal] = useState(false);
   // useLayoutEffect (not useEffect) so this resolves before the browser
   // paints: the prerendered/SSR markup always starts from `false` (no
@@ -261,18 +260,13 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     const go = () => {
       setIsMd(wide.matches);
       setMousey(hover.matches);
-      setViewportHeight(window.visualViewport?.height ?? window.innerHeight);
     };
     go();
     wide.addEventListener("change", go);
     hover.addEventListener("change", go);
-    window.addEventListener("resize", go);
-    window.visualViewport?.addEventListener("resize", go);
     return () => {
       wide.removeEventListener("change", go);
       hover.removeEventListener("change", go);
-      window.removeEventListener("resize", go);
-      window.visualViewport?.removeEventListener("resize", go);
     };
   }, []);
   const sideTray = tall && isMd;
@@ -280,7 +274,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const canTurnToFit = preferredOrientation === "clockwise";
   const orientation = !isMd && canTurnToFit && !showOriginal ? "clockwise" : "natural";
   const displayed = displayedGrid(rows, cols, orientation);
-  const boardHeightLimit = isMd ? null : mobileBoardMaxHeight(viewportHeight, displayed.rows);
+  const boardHeightLimit = isMd ? null : mobileBoardMaxHeight(displayed.rows);
 
   // Always starts empty — matching exactly what the prerendered/SSR markup
   // shows, since the server never has access to localStorage. A saved board
@@ -868,6 +862,9 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
             // Let the puzzle, not the page gutter, own the scarce width on a
             // phone. A wide board may already have been quarter-turned above.
             !sideTray && "-mx-4 w-[calc(100%+2rem)] sm:mx-0 sm:w-full",
+            // Breathing room above the fixed tray once a tall board makes
+            // the page scroll, so the last row doesn't sit flush against it.
+            !sideTray && !isMd && "pb-6",
           )}
           onPointerUp={(e) => {
             if (e.button !== 0) return;
