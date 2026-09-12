@@ -23,11 +23,13 @@ import {
   LEVELS,
   emptyState,
   evaluate,
+  flip,
   key,
   legalNeighbors,
   parsePuzzle,
   remainderTileable,
   remove,
+  rotatePlaced,
   rotateTab,
   snapPlacement,
   type Cell,
@@ -54,8 +56,10 @@ import archiveJson from "@/data/archive.json";
 
 export const Route = createFileRoute("/play/$date/$level")({
   loader: async ({ params }) => {
-    const day = /^\d{4}-\d{2}-\d{2}$/.test(params.date) ? await loadDay(params.date) : undefined;
-    return { day: day ?? null };
+    const loaded = /^\d{4}-\d{2}-\d{2}$/.test(params.date)
+      ? await loadDay(params.date)
+      : { kind: "missing" as const };
+    return { day: loaded.kind === "ok" ? loaded.day : null, loadError: loaded.kind === "error" };
   },
   pendingMs: 200,
   pendingComponent: PlayPending,
@@ -79,7 +83,7 @@ function PlayPending() {
 
 function PlayPage() {
   const { date, level: rawLevel } = Route.useParams();
-  const { day } = Route.useLoaderData();
+  const { day, loadError } = Route.useLoaderData();
   const level: Level = LEVELS.includes(rawLevel as Level) ? (rawLevel as Level) : "easy";
   const dateOk = /^\d{4}-\d{2}-\d{2}$/.test(date);
 
@@ -96,10 +100,14 @@ function PlayPage() {
   if (!day) {
     return (
       <Shell>
-        <h1 className="font-display mt-8 text-2xl font-semibold">No puzzle for {date}</h1>
+        <h1 className="font-display mt-8 text-2xl font-semibold">
+          {loadError ? "Couldn’t load this puzzle" : `No puzzle for ${date}`}
+        </h1>
         <p className="text-muted-foreground">
-          It may not be archived yet. <Link to="/">Back to the archive</Link>.
+          {loadError ? "Check your connection and try again." : "It may not be archived yet."}{" "}
+          <Link to="/">Back to the archive</Link>.
         </p>
+        {loadError ? <Button className="mt-4 self-start" onClick={() => location.reload()}>Try again</Button> : null}
       </Shell>
     );
   }
@@ -227,6 +235,27 @@ function BoardControls({
           </AlertDialogContent>
         </AlertDialog>
       </div>
+    </div>
+  );
+}
+
+function SelectedDominoControls({
+  selected,
+  onRotate,
+  onFlip,
+  onRemove,
+}: {
+  selected: number | null;
+  onRotate: () => void;
+  onFlip: () => void;
+  onRemove: () => void;
+}) {
+  if (selected == null) return null;
+  return (
+    <div className="mt-2 flex items-center gap-2" aria-label="Selected domino controls">
+      <Button variant="secondary" size="sm" onClick={onRotate}>Rotate</Button>
+      <Button variant="secondary" size="sm" onClick={onFlip}>Flip</Button>
+      <Button variant="ghost" size="sm" onClick={onRemove}>Remove</Button>
     </div>
   );
 }
@@ -388,6 +417,12 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Tab") {
+        // A focused board cell is a real keyboard control. Let Tab move out
+        // of it to the selected-domino controls instead of stealing the key
+        // for the desktop rotation shortcut.
+        if ((e.target as Element | null)?.closest('[role="button"], button, a, input, select, textarea')) {
+          return;
+        }
         tabHeld.current = true;
         const cur = selRef.current;
         const st = stateRef.current;
@@ -597,6 +632,30 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     tabRot.current = null;
   }
 
+  function rotateSelected() {
+    const cur = selRef.current;
+    if (solvedFlag || cur?.kind !== "board" || !stateRef.current[cur.d]) return;
+    const next = rotatePlaced(puzzle, stateRef.current, cur.d);
+    if (next === stateRef.current) return;
+    afterMove(next);
+    holdSel(cur);
+    setFresh(null);
+  }
+
+  function flipSelected() {
+    const cur = selRef.current;
+    if (solvedFlag || cur?.kind !== "board" || !stateRef.current[cur.d]) return;
+    afterMove(flip(stateRef.current, cur.d));
+    holdSel({ ...cur, end: cur.end === 0 ? 1 : 0 });
+    setFresh(null);
+  }
+
+  function removeSelected() {
+    const cur = selRef.current;
+    if (solvedFlag || cur?.kind !== "board") return;
+    pullOff(cur.d);
+  }
+
   function onCell(cell: Cell) {
     if (solvedFlag) return;
     const st = stateRef.current;
@@ -700,7 +759,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const hint = solvedFlag
     ? ""
     : sel?.kind === "board"
-      ? `${verb} a new cell to move it. Tab rotates.`
+      ? `${verb} a new cell to move it, or use the controls to rotate, flip, or remove it.`
       : sel?.kind === "tray"
         ? anchor
           ? puzzle.dominoes[sel.d][0] === puzzle.dominoes[sel.d][1]
@@ -708,9 +767,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
             : `${verb} a neighbouring cell to set the other half.`
           : `${verb} the cell this pip should sit on. Tab flips it.`
         : fresh != null
-          ? mousey
-            ? "Click to rotate, double-click to remove."
-            : "Tap to rotate, double-tap to remove."
+          ? "Select the placed domino to move, rotate, flip, or remove it."
           : mousey
             ? "Click a domino, or a placed one to move it."
             : "Tap a domino, or a placed one to move it.";
@@ -893,6 +950,12 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
             >
               {hint}
             </p>
+            <SelectedDominoControls
+              selected={sel?.kind === "board" ? sel.d : null}
+              onRotate={rotateSelected}
+              onFlip={flipSelected}
+              onRemove={removeSelected}
+            />
             <PipsTray
               dominoes={puzzle.dominoes}
               placed={state.map(Boolean)}
@@ -916,7 +979,9 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
         </div>
       </div>
 
-      {!sideTray && !isMd ? <div className="h-[7.75rem]" aria-hidden="true" /> : null}
+      {!sideTray && !isMd ? (
+        <div className={sel?.kind === "board" ? "h-[10.5rem]" : "h-[7.75rem]"} aria-hidden="true" />
+      ) : null}
     </Shell>
   );
 }
