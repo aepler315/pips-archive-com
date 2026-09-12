@@ -232,7 +232,6 @@ export function PipsBoard({
   const cells = puzzleCells(puzzle);
   const b = boundsOf(cells);
   const assigned = colorRegions(puzzle);
-  const occ = occupancy(puzzle, state);
   const pad = 0.4;
   const vbX = b.minC - pad;
   const vbY = b.minR - pad;
@@ -277,7 +276,7 @@ export function PipsBoard({
       viewBox={displayViewBox}
       preserveAspectRatio="xMidYMid meet"
       className="board-svg select-none"
-      role="group"
+      role="img"
       aria-label="Pips board"
       onPointerMove={(e) => {
         const dragging = drag.current?.id === e.pointerId;
@@ -360,34 +359,6 @@ export function PipsBoard({
           fill="var(--color-grout)"
           pointerEvents="all"
         />
-
-        {cells.map((cell) => {
-          const [r, c] = cell;
-          const current = occ.get(key(r, c));
-          const region = puzzle.regions[puzzle.cells.get(key(r, c)) ?? 0];
-          const contents = current ? `contains ${current.pip}` : "is empty";
-          return (
-            <rect
-              key={`cell-${r}-${c}`}
-              x={c}
-              y={r}
-              width={1}
-              height={1}
-              fill="transparent"
-              stroke="transparent"
-              className="focus:stroke-ring"
-              strokeWidth={0.06}
-              role="button"
-              tabIndex={0}
-              aria-label={`Row ${r + 1}, column ${c + 1} ${contents}. ${regionDescription(region)}`}
-              onKeyDown={(e) => {
-                if (e.key !== "Enter" && e.key !== " ") return;
-                e.preventDefault();
-                onCell(cell);
-              }}
-            />
-          );
-        })}
 
         {puzzle.regions.map((reg, i) => {
           const sw = swatchFor(assigned, i);
