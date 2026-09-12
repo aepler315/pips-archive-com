@@ -19,7 +19,7 @@ type Sel = { kind: "tray" | "board"; d: number } | null;
 // diagonally and sit on the corner pip; scaled down they clear it
 // (pips sit 0.28 units in from the badge anchor, the scaled diamond
 // only reaches ~0.15).
-const BADGE_SCALE = 0.78;
+const BADGE_SCALE = 0.66;
 
 type Props = {
   puzzle: Puzzle;
