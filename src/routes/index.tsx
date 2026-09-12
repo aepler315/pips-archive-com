@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight, ChevronsRight } from "lucide-react";
+import { RandomUnsolved } from "@/components/random-unsolved";
 import { SiteHeader } from "@/components/site-header";
 import { buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { LEVELS, type Level } from "@/lib/pips/engine";
+import { LEVELS } from "@/lib/pips/engine";
 import { prefetchDay } from "@/lib/pips/days";
+import { resultKeyOf } from "@/lib/pips/random";
 import { groupMonths, monthChip, monthLabel, resolveMonth } from "@/lib/pips/months";
 import { allResults, fmt, type Result } from "@/lib/pips/store";
 import type { ArchiveIndex, IndexEntry } from "@/lib/pips/types";
@@ -16,25 +18,12 @@ type Search = { month?: string };
 type ResultMap = Map<string, Result>;
 type CalCell = { day: number; entry: IndexEntry | null } | null;
 
-const resultKeyOf = (date: string, level: Level) => `${date}:${level}`;
-
 export const Route = createFileRoute("/")({
   validateSearch: (raw: Record<string, unknown>): Search => ({
     month: typeof raw.month === "string" && /^\d{4}-\d{2}$/.test(raw.month) ? raw.month : undefined,
   }),
   component: Home,
 });
-
-function pickRandomUnsolved(puzzles: IndexEntry[], results: ResultMap): [string, Level] | null {
-  if (!puzzles.length) return null;
-  const start = Math.floor(Math.random() * puzzles.length);
-  for (let i = 0; i < puzzles.length; i++) {
-    const p = puzzles[(start + i) % puzzles.length];
-    const open = LEVELS.filter((l) => !results.has(resultKeyOf(p.date, l)));
-    if (open.length) return [p.date, open[Math.floor(Math.random() * open.length)]];
-  }
-  return null;
-}
 
 function dayLabel(date: string) {
   return new Date(date + "T12:00:00").toLocaleDateString(undefined, {
@@ -215,38 +204,6 @@ function Home() {
 
       <DayDialog entry={selected} results={results} onClose={() => setSelected(null)} />
     </div>
-  );
-}
-
-function RandomUnsolved({ puzzles, results }: { puzzles: IndexEntry[]; results: ResultMap }) {
-  const navigate = useNavigate();
-  const [none, setNone] = useState(false);
-  if (none) {
-    return (
-      <span className={cn(buttonVariants({ variant: "secondary" }), "h-9 opacity-40 sm:h-10")}>
-        All solved
-      </span>
-    );
-  }
-  return (
-    <button
-      type="button"
-      className={cn(buttonVariants({ variant: "secondary" }), "h-9 px-3.5 sm:h-10 sm:px-4")}
-      onClick={() => {
-        const pick = pickRandomUnsolved(puzzles, results);
-        if (!pick) {
-          setNone(true);
-          return;
-        }
-        prefetchDay(pick[0]);
-        void navigate({
-          to: "/play/$date/$level",
-          params: { date: pick[0], level: pick[1] },
-        });
-      }}
-    >
-      Random unsolved
-    </button>
   );
 }
 
