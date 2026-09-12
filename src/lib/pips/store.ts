@@ -12,27 +12,39 @@ export type Result = {
 
 export type Progress = { state: GameState; elapsed: number };
 
-const read = <T>(k: string): T | null => {
+const storage = (): Storage | null => {
   if (typeof window === "undefined") return null;
   try {
-    const v = localStorage.getItem(k);
+    return localStorage;
+  } catch {
+    return null;
+  }
+};
+
+const read = <T>(k: string): T | null => {
+  const s = storage();
+  if (!s) return null;
+  try {
+    const v = s.getItem(k);
     return v ? (JSON.parse(v) as T) : null;
   } catch {
     return null;
   }
 };
 const write = (k: string, v: unknown) => {
-  if (typeof window === "undefined") return;
+  const s = storage();
+  if (!s) return;
   try {
-    localStorage.setItem(k, JSON.stringify(v));
+    s.setItem(k, JSON.stringify(v));
   } catch {
     /* storage full or blocked (e.g. Safari Private Browsing): play on unsaved */
   }
 };
 const remove = (k: string) => {
-  if (typeof window === "undefined") return;
+  const s = storage();
+  if (!s) return;
   try {
-    localStorage.removeItem(k);
+    s.removeItem(k);
   } catch {
     /* storage full or blocked */
   }
@@ -64,11 +76,12 @@ export function recordSolve(date: string, level: Level, ms: number): Result {
 }
 
 export function allResults(): (Result & { date: string; level: Level })[] {
-  if (typeof window === "undefined") return [];
+  const s = storage();
+  if (!s) return [];
   const out: (Result & { date: string; level: Level })[] = [];
   const prefix = `${P}result:`;
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
+  for (let i = 0; i < s.length; i++) {
+    const k = s.key(i);
     if (!k?.startsWith(prefix)) continue;
     const rest = k.slice(prefix.length);
     const cut = rest.lastIndexOf(":");
@@ -81,10 +94,11 @@ export function allResults(): (Result & { date: string; level: Level })[] {
 }
 
 export function exportAll() {
-  if (typeof window === "undefined") return "{}";
+  const s = storage();
+  if (!s) return "{}";
   const data: Record<string, unknown> = {};
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
+  for (let i = 0; i < s.length; i++) {
+    const k = s.key(i);
     if (k?.startsWith(P)) data[k] = read(k);
   }
   return JSON.stringify({ version: 1, exported: new Date().toISOString(), data }, null, 1);
@@ -103,13 +117,49 @@ function isValidResult(v: unknown): v is Result {
   );
 }
 
-export function importAll(text: string): { imported: number; skipped: number } {
+function isCell(v: unknown): v is [number, number] {
+  return Array.isArray(v) && v.length === 2 && v.every((n) => typeof n === "number");
+}
+
+function isValidProgress(v: unknown): v is Progress {
+  if (!v || typeof v !== "object") return false;
+  const p = v as { state?: unknown; elapsed?: unknown };
+  return (
+    typeof p.elapsed === "number" &&
+    p.elapsed >= 0 &&
+    Array.isArray(p.state) &&
+    p.state.every(
+      (placement) =>
+        placement === null ||
+        (typeof placement === "object" &&
+          placement !== null &&
+          "cells" in placement &&
+          Array.isArray(placement.cells) &&
+          placement.cells.length === 2 &&
+          placement.cells.every(isCell)),
+    )
+  );
+}
+
+export function importAll(text: string): { imported: number; progress: number; skipped: number } {
   const obj = JSON.parse(text) as { version?: number; data?: Record<string, unknown> };
   if (obj?.version !== 1 || !obj.data) throw new Error("Not a Pips Archive export");
   let imported = 0;
+  let progress = 0;
   let skipped = 0;
   for (const [k, v] of Object.entries(obj.data)) {
-    if (!k.startsWith(`${P}result:`)) continue;
+    const isResult = k.startsWith(`${P}result:`);
+    const isProgress = k.startsWith(`${P}progress:`);
+    if (!isResult && !isProgress) continue;
+    if (isProgress) {
+      if (!isValidProgress(v)) {
+        skipped++;
+        continue;
+      }
+      write(k, v);
+      progress++;
+      continue;
+    }
     if (!isValidResult(v)) {
       skipped++;
       continue;
@@ -131,14 +181,15 @@ export function importAll(text: string): { imported: number; skipped: number } {
     );
     imported++;
   }
-  return { imported, skipped };
+  return { imported, progress, skipped };
 }
 
 export function eraseAll() {
-  if (typeof window === "undefined") return;
+  const s = storage();
+  if (!s) return;
   const keys: string[] = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
+  for (let i = 0; i < s.length; i++) {
+    const k = s.key(i);
     if (k?.startsWith(P)) keys.push(k);
   }
   keys.forEach(remove);

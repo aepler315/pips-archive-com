@@ -1,16 +1,13 @@
 export type BoardOrientation = "natural" | "clockwise";
 
-const WIDE_TURN_RATIO = 1.75;
 const MIN_TURN_COLUMNS = 7;
 const IDEAL_CELL_PX = 56;
-const BOARD_PADDING_UNITS = 1.4;
+const BOARD_PADDING_UNITS = 0.8;
 
-/** Wide boards gain substantially larger touch targets when their long axis
- * follows a portrait phone's long axis. Less-extreme boards stay canonical. */
+/** A board that is wider than tall gains larger touch targets when its long
+ * axis follows a portrait phone's long axis. */
 export function mobileBoardOrientation(rows: number, cols: number): BoardOrientation {
-  return cols >= MIN_TURN_COLUMNS && cols / Math.max(rows, 1) >= WIDE_TURN_RATIO
-    ? "clockwise"
-    : "natural";
+  return cols >= MIN_TURN_COLUMNS && cols - rows >= 2 ? "clockwise" : "natural";
 }
 
 export function displayedGrid(

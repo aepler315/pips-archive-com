@@ -1,17 +1,19 @@
 import type { RawDay } from "./engine";
 
 const cache = new Map<string, RawDay>();
-const inflight = new Map<string, Promise<RawDay | undefined>>();
+const inflight = new Map<string, Promise<DayLoad>>();
+
+export type DayLoad = { kind: "ok"; day: RawDay } | { kind: "missing" } | { kind: "error" };
 
 export function prefetchDay(date: string) {
   if (typeof window === "undefined") return;
   void loadDay(date);
 }
 
-export async function loadDay(date: string): Promise<RawDay | undefined> {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return undefined;
+export async function loadDay(date: string): Promise<DayLoad> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { kind: "missing" };
   const hit = cache.get(date);
-  if (hit) return hit;
+  if (hit) return { kind: "ok", day: hit };
   const pending = inflight.get(date);
   if (pending) return pending;
   const job = readDay(date).finally(() => inflight.delete(date));
@@ -19,7 +21,7 @@ export async function loadDay(date: string): Promise<RawDay | undefined> {
   return job;
 }
 
-async function readDay(date: string): Promise<RawDay | undefined> {
+async function readDay(date: string): Promise<DayLoad> {
   try {
     let data: RawDay | undefined;
     if (typeof window === "undefined") {
@@ -38,17 +40,18 @@ async function readDay(date: string): Promise<RawDay | undefined> {
           /* try next */
         }
       }
-      if (!text) return undefined;
+      if (!text) return { kind: "missing" };
       data = JSON.parse(text) as RawDay;
     } else {
       const r = await fetch(`/data/puzzles/${date}.json`);
-      if (!r.ok) return undefined;
+      if (r.status === 404) return { kind: "missing" };
+      if (!r.ok) return { kind: "error" };
       data = (await r.json()) as RawDay;
     }
-    if (!data?.easy) return undefined;
+    if (!data?.easy) return { kind: "error" };
     cache.set(date, data);
-    return data;
+    return { kind: "ok", day: data };
   } catch {
-    return undefined;
+    return { kind: "error" };
   }
 }

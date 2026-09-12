@@ -5,6 +5,7 @@ import { displayedGrid, mobileBoardMaxHeight, mobileBoardOrientation } from "./l
 test("turns only distinctly wide boards on mobile", () => {
   assert.equal(mobileBoardOrientation(3, 9), "clockwise");
   assert.equal(mobileBoardOrientation(2, 7), "clockwise");
+  assert.equal(mobileBoardOrientation(7, 9), "clockwise");
   assert.equal(mobileBoardOrientation(2, 4), "natural");
   assert.equal(mobileBoardOrientation(7, 8), "natural");
   assert.equal(mobileBoardOrientation(10, 2), "natural");
@@ -16,6 +17,6 @@ test("swaps display dimensions for a quarter turn", () => {
 });
 
 test("sizes board height off a comfortable cell size", () => {
-  assert.equal(mobileBoardMaxHeight(4), 302);
-  assert.equal(mobileBoardMaxHeight(10), 638);
+  assert.equal(mobileBoardMaxHeight(4), 269);
+  assert.equal(mobileBoardMaxHeight(10), 605);
 });

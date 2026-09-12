@@ -197,9 +197,12 @@ function StatsPage() {
             const f = e.target.files?.[0];
             if (!f) return;
             try {
-              const { imported, skipped } = importAll(await f.text());
+              const { imported, progress, skipped } = importAll(await f.text());
               const text =
                 `Imported ${imported} result${imported === 1 ? "" : "s"}.` +
+                (progress
+                  ? ` Restored ${progress} unfinished board${progress === 1 ? "" : "s"}.`
+                  : "") +
                 (skipped ? ` Skipped ${skipped} malformed entr${skipped === 1 ? "y" : "ies"}.` : "");
               setImportStatus({ ok: true, text });
               setRev((x) => x + 1);
