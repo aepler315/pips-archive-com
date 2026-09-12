@@ -7,6 +7,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { RotateCw, TriangleAlert } from "lucide-react";
 import { PipsBoard } from "@/components/pips-board";
 import { PipsTray } from "@/components/pips-tray";
+import { RandomUnsolved, resultsMapFromStorage } from "@/components/random-unsolved";
 import { SiteHeader } from "@/components/site-header";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -52,7 +53,11 @@ import { nextPuzzleTarget } from "@/lib/pips/months";
 import type { ArchiveIndex } from "@/lib/pips/types";
 import archiveJson from "@/data/archive.json";
 
+type PlaySearch = { from?: "random" };
+
 export const Route = createFileRoute("/play/$date/$level")({
+  validateSearch: (raw: Record<string, unknown>): PlaySearch =>
+    raw.from === "random" ? { from: "random" } : { from: undefined },
   loader: async ({ params }) => {
     const day = /^\d{4}-\d{2}-\d{2}$/.test(params.date) ? await loadDay(params.date) : undefined;
     return { day: day ?? null };
@@ -189,6 +194,7 @@ function BoardControls({
   onReset,
   disabled,
   compact,
+  minimal,
 }: {
   placed: number;
   total: number;
@@ -197,16 +203,21 @@ function BoardControls({
   onReset: () => void;
   disabled?: boolean;
   compact?: boolean;
+  minimal?: boolean;
 }) {
   return (
-    <div className={cn(compact ? "mt-1" : "mt-4", "flex items-center justify-between")}>
-      <span className="text-sm text-muted-foreground" aria-live="polite">
-        {placed} / {total} placed
-      </span>
+    <div className={cn(compact ? "mt-1" : "mt-4", "flex items-center", minimal ? "justify-end" : "justify-between")}>
+      {!minimal ? (
+        <span className="text-sm text-muted-foreground" aria-live="polite">
+          {placed} / {total} placed
+        </span>
+      ) : null}
       <div className="flex items-center gap-1">
-        <Button variant="ghost" size="sm" onClick={onUndo} disabled={!canUndo || disabled}>
-          Undo
-        </Button>
+        {!minimal ? (
+          <Button variant="ghost" size="sm" onClick={onUndo} disabled={!canUndo || disabled}>
+            Undo
+          </Button>
+        ) : null}
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <Button variant="ghost" size="sm">
@@ -216,7 +227,7 @@ function BoardControls({
           <AlertDialogContent>
             <AlertDialogTitle>Clear the board?</AlertDialogTitle>
             <AlertDialogDescription>
-              Every placed domino comes off. The clock keeps running.
+              {minimal ? "Every placed domino comes off." : "Every placed domino comes off. The clock keeps running."}
             </AlertDialogDescription>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -232,6 +243,7 @@ function BoardControls({
 }
 
 function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay }) {
+  const { from } = Route.useSearch();
   const puzzle = useMemo(() => parsePuzzle(raw[level]), [raw, level]);
   const dateLabel = useMemo(
     () =>
@@ -307,6 +319,8 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   // every returning player and crashes hydration for the whole page.
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => setHydrated(true), []);
+  const fromRandomRequested = from === "random";
+  const fromRandom = hydrated && fromRandomRequested;
   const puzzleRef = useRef(puzzle);
   puzzleRef.current = puzzle;
   const [fresh, setFresh] = useState<number | null>(null);
@@ -749,22 +763,33 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   return (
     <Shell wide={sideTray}>
       <h1 className="font-display mt-7 text-[1.45rem] font-semibold tracking-tight">{dateLabel}</h1>
-      <p className="mt-1 text-muted-foreground">
-        {level[0].toUpperCase() + level.slice(1)} · by {raw[level].constructors ?? "unknown"}
-      </p>
-
-      <details className="mt-2 text-sm text-muted-foreground">
-        <summary className="inline cursor-pointer select-none text-foreground underline decoration-foreground/30 underline-offset-4">
-          How to read the board
-        </summary>
-        <p className="mt-1 max-w-[38rem] leading-relaxed">
-          Place every domino so each colored region meets its rule: a number is a sum,{" "}
-          <span className="text-foreground">=</span> means equal pips,{" "}
-          <span className="text-foreground">≠</span> means all different, and{" "}
-          <span className="text-foreground">{"< / >"}</span> compare the region&apos;s sum. Cream
-          cells are free.
+      {!fromRandom ? (
+        <p className="mt-1 text-muted-foreground">
+          {level[0].toUpperCase() + level.slice(1)} · by {raw[level].constructors ?? "unknown"}
         </p>
-      </details>
+      ) : null}
+
+      {fromRandom ? (
+        <RandomUnsolved
+          className="mt-2"
+          puzzles={(archiveJson as ArchiveIndex).puzzles}
+          results={hydrated ? resultsMapFromStorage() : new Map()}
+          exclude={{ date, level }}
+        />
+      ) : (
+        <details className="mt-2 text-sm text-muted-foreground">
+          <summary className="inline cursor-pointer select-none text-foreground underline decoration-foreground/30 underline-offset-4">
+            How to read the board
+          </summary>
+          <p className="mt-1 max-w-[38rem] leading-relaxed">
+            Place every domino so each colored region meets its rule: a number is a sum,{" "}
+            <span className="text-foreground">=</span> means equal pips,{" "}
+            <span className="text-foreground">≠</span> means all different, and{" "}
+            <span className="text-foreground">{"< / >"}</span> compare the region&apos;s sum. Cream
+            cells are free.
+          </p>
+        </details>
+      )}
 
       <div className="mt-4 mb-3 flex flex-wrap items-center justify-between gap-3">
         <div className="inline-flex rounded-full bg-muted p-0.5">
@@ -775,6 +800,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
                 key={l}
                 to="/play/$date/$level"
                 params={{ date, level: l }}
+                search={fromRandomRequested ? { from: "random" } : { from: undefined }}
                 className={cn(
                   "rounded-full px-3.5 py-1.5 text-sm no-underline",
                   l === level ? "bg-foreground text-background" : "text-muted-foreground",
@@ -786,14 +812,16 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
             );
           })}
         </div>
-        <div
-          className={cn(
-            "min-w-[4.5ch] text-right font-medium text-[1.35rem] tabular-nums",
-            tickStart.current === null && "text-muted-foreground",
-          )}
-        >
-          {fmt(nowElapsed())}
-        </div>
+        {!fromRandom ? (
+          <div
+            className={cn(
+              "min-w-[4.5ch] text-right font-medium text-[1.35rem] tabular-nums",
+              tickStart.current === null && "text-muted-foreground",
+            )}
+          >
+            {fmt(nowElapsed())}
+          </div>
+        ) : null}
       </div>
 
       {solveMs !== null ? (
@@ -885,14 +913,16 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
           )}
         >
           <div className={cn(!sideTray && !isMd && "mx-auto w-full max-w-[720px]")}>
-            <p
-              className={cn(
-                "text-muted-foreground",
-                !sideTray && !isMd ? "min-h-[1.1rem] truncate text-xs" : "min-h-[1.4em] text-sm",
-              )}
-            >
-              {hint}
-            </p>
+            {!fromRandom ? (
+              <p
+                className={cn(
+                  "text-muted-foreground",
+                  !sideTray && !isMd ? "min-h-[1.1rem] truncate text-xs" : "min-h-[1.4em] text-sm",
+                )}
+              >
+                {hint}
+              </p>
+            ) : null}
             <PipsTray
               dominoes={puzzle.dominoes}
               placed={state.map(Boolean)}
@@ -911,6 +941,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
               onReset={doReset}
               disabled={solvedFlag}
               compact={!sideTray && !isMd}
+              minimal={fromRandom}
             />
           </div>
         </div>
