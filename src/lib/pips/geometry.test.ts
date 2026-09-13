@@ -12,7 +12,7 @@ const region = (cells: [number, number][]): Region => ({
 
 // Mirrors BADGE_CORNER_PULL in geometry.ts: how far the badge sits back from
 // the raw grid corner, onto the region's own southeasternmost cell.
-const PULL = 0.24;
+const PULL = 0.1;
 
 test("badge sits near the south-east corner of a single cell, pulled onto its own fill", () => {
   assert.deepEqual(badgeAnchor(region([[0, 0]])), { x: 1 - PULL, y: 1 - PULL });

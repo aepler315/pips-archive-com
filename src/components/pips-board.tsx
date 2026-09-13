@@ -5,11 +5,11 @@ import { colorRegions, swatchFor, type Swatch } from "@/lib/pips/colors";
 import type { BoardOrientation } from "@/lib/pips/layout";
 import {
   BOARD,
+  CELL,
   PIP_LAYOUT,
   badgeAnchor,
   boundsOf,
   puzzleCells,
-  regionDividers,
   unionPath,
 } from "@/lib/pips/geometry";
 
@@ -19,7 +19,7 @@ type Sel = { kind: "tray" | "board"; d: number } | null;
 // diagonally and sit on the corner pip; scaled down they clear it
 // (pips sit 0.28 units in from the badge anchor, the scaled diamond
 // only reaches ~0.15).
-const BADGE_SCALE = 0.66;
+const BADGE_SCALE = 0.4;
 
 type Props = {
   puzzle: Puzzle;
@@ -180,7 +180,7 @@ function Badge({
   filterId: string;
   counterRotate?: boolean;
 }) {
-  const s = Math.max(0.7, 0.5 + 0.11 * text.length);
+  const s = Math.max(0.58, 0.4 + 0.09 * text.length);
   return (
     // Shrunken as a whole (diamond, stroke and text scale together) around
     // the corner anchor, so it stays tucked into the same spot while
@@ -194,11 +194,11 @@ function Badge({
         y={-s / 2}
         width={s}
         height={s}
-        rx={s * 0.18}
+        rx={s * 0.28}
         transform="rotate(45)"
         fill={swatch.badge}
-        stroke={status === "violated" ? "var(--color-bad-ink)" : "rgba(255,255,255,0.45)"}
-        strokeWidth={status === "violated" ? 0.09 : 0.035}
+        stroke={status === "violated" ? "var(--color-bad-ink)" : "rgba(255,255,255,0.55)"}
+        strokeWidth={status === "violated" ? 0.09 : 0.045}
         filter={`url(#${filterId})`}
       />
       <text
@@ -366,32 +366,29 @@ export function PipsBoard({
           let fill = sw.fill;
           if (st === "violated") fill = `color-mix(in oklab, #e8b0a8 45%, ${sw.fill})`;
           const d = unionPath(reg.cells, BOARD.radius, BOARD.inset);
-          const divs = regionDividers(reg.cells, BOARD.inset, BOARD.dividerPad);
           return (
             <g key={`r${i}`} className="pointer-events-none" filter={`url(#${uid}-shadow)`}>
+              {reg.cells.map(([r, c], j) => (
+                <rect
+                  key={j}
+                  x={c + CELL.gap / 2}
+                  y={r + CELL.gap / 2}
+                  width={1 - CELL.gap}
+                  height={1 - CELL.gap}
+                  rx={CELL.radius}
+                  fill={fill}
+                />
+              ))}
+              {st === "violated" && <path d={d} fill={`url(#${uid}-hatch)`} />}
               <path
                 d={d}
-                fill={fill}
+                fill="none"
                 stroke={sw.dash}
                 strokeWidth={BOARD.stroke}
                 strokeDasharray={BOARD.dash}
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
-              {st === "violated" && <path d={d} fill={`url(#${uid}-hatch)`} />}
-              {divs.map((s, j) => (
-                <line
-                  key={j}
-                  x1={s.x1}
-                  y1={s.y1}
-                  x2={s.x2}
-                  y2={s.y2}
-                  stroke={sw.dash}
-                  strokeWidth={BOARD.innerStroke}
-                  strokeDasharray={BOARD.innerDash}
-                  strokeLinecap="round"
-                />
-              ))}
             </g>
           );
         })}
