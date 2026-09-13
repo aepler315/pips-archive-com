@@ -19,7 +19,7 @@ type Sel = { kind: "tray" | "board"; d: number } | null;
 // diagonally and sit on the corner pip; scaled down they clear it
 // (pips sit 0.28 units in from the badge anchor, the scaled diamond
 // only reaches ~0.15).
-const BADGE_SCALE = 0.66;
+const BADGE_SCALE = 0.4;
 
 type Props = {
   puzzle: Puzzle;
@@ -180,7 +180,7 @@ function Badge({
   filterId: string;
   counterRotate?: boolean;
 }) {
-  const s = Math.max(0.7, 0.5 + 0.11 * text.length);
+  const s = Math.max(0.58, 0.4 + 0.09 * text.length);
   return (
     // Shrunken as a whole (diamond, stroke and text scale together) around
     // the corner anchor, so it stays tucked into the same spot while

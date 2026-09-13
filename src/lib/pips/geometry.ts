@@ -202,7 +202,7 @@ export function regionDividers(cells: Cell[], inset: number, endPad: number): Se
 // region's own colored shape is pulled back by) with real margin — anchoring
 // at the bare grid corner puts the badge in the neutral grout between
 // regions, not inside the color it's meant to label.
-const BADGE_CORNER_PULL = 0.24;
+const BADGE_CORNER_PULL = 0.1;
 
 /** Near the south-east corner of the region's south-easternmost cell, pulled
  *  in from the grid line so the badge sits on this region's own fill rather
