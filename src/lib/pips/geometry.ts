@@ -8,13 +8,22 @@ type Vert = [number, number];
 export type Bounds = { minR: number; minC: number; maxR: number; maxC: number };
 
 export const BOARD = {
-  inset: 0.09,
-  radius: 0.26,
-  stroke: 0.058,
+  inset: 0.05,
+  radius: 0.3,
+  stroke: 0.055,
   innerStroke: 0.044,
-  dash: "0.22 0.13",
+  dash: "0.2 0.15",
   innerDash: "0.16 0.11",
   dividerPad: 0.14,
+} as const;
+
+// Individual cell tiles drawn inside each region — the small gap between
+// them (rather than one solid blob) is what gives the board its "distinct
+// soft squares" look; the dashed BOARD outline then wraps the whole
+// region shape on top.
+export const CELL = {
+  gap: 0.06,
+  radius: 0.16,
 } as const;
 
 export function boundsOf(cells: Iterable<Cell>): Bounds {
