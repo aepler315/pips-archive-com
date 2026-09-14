@@ -18,8 +18,8 @@ type Sel = { kind: "tray" | "board"; d: number } | null;
 // Uniform shrink for constraint badges. At 1 they span a full cell
 // diagonally and sit on the corner pip; scaled down they clear it
 // (pips sit 0.28 units in from the badge anchor, the scaled diamond
-// only reaches ~0.15).
-const BADGE_SCALE = 0.4;
+// only reaches ~0.21).
+const BADGE_SCALE = 0.55;
 
 type Props = {
   puzzle: Puzzle;
@@ -180,32 +180,48 @@ function Badge({
   filterId: string;
   counterRotate?: boolean;
 }) {
-  const s = Math.max(0.58, 0.4 + 0.09 * text.length);
+  const s = Math.max(0.62, 0.44 + 0.1 * text.length);
+  const stroke = status === "violated" ? "var(--color-bad-ink)" : "rgba(255,255,255,0.55)";
+  const strokeWidth = status === "violated" ? 0.09 : 0.045;
+  // A little tag-style tab pokes off the diamond's top vertex (a rotated
+  // square's corner sits straight up at half its diagonal) to match a
+  // gift-tag silhouette rather than a plain rhombus.
+  const vertex = s * Math.SQRT1_2;
+  const tabW = s * 0.26;
+  const tabH = s * 0.24;
   return (
-    // Shrunken as a whole (diamond, stroke and text scale together) around
-    // the corner anchor, so it stays tucked into the same spot while
-    // covering less of the tile's pips.
+    // Scaled as a whole (diamond, tab, stroke and text together) around the
+    // corner anchor, so it stays tucked into the same spot while covering
+    // less of the tile's pips.
     <g
       transform={`translate(${x},${y}) ${counterRotate ? "rotate(-90) " : ""}scale(${BADGE_SCALE})`}
       className="pointer-events-none"
     >
       <rect
+        x={-tabW / 2}
+        y={-vertex - tabH + s * 0.08}
+        width={tabW}
+        height={tabH}
+        rx={tabW * 0.4}
+        fill={swatch.badge}
+      />
+      <rect
         x={-s / 2}
         y={-s / 2}
         width={s}
         height={s}
-        rx={s * 0.28}
+        rx={s * 0.32}
         transform="rotate(45)"
         fill={swatch.badge}
-        stroke={status === "violated" ? "var(--color-bad-ink)" : "rgba(255,255,255,0.55)"}
-        strokeWidth={status === "violated" ? 0.09 : 0.045}
+        stroke={stroke}
+        strokeWidth={strokeWidth}
         filter={`url(#${filterId})`}
       />
       <text
         textAnchor="middle"
         dominantBaseline="central"
         fill="#fff"
-        fontSize={text.length > 2 ? 0.35 : 0.42}
+        fontSize={text.length > 2 ? 0.38 : 0.46}
         fontWeight={700}
         style={{ fontFamily: "var(--font-sans)" }}
       >
