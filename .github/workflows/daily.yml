@@ -1,7 +1,11 @@
 name: Fetch today's puzzle
 on:
   schedule:
-    - cron: '20 5 * * *'   # 05:20 UTC, after the NYT rollover (midnight ET)
+    # GitHub Actions cron is UTC-only, so midnight America/New_York (the NYT's
+    # own rollover) needs two fixed triggers, one per DST regime; the gate
+    # step below no-ops whichever one doesn't match today's actual ET offset.
+    - cron: '5 4 * * *'   # 00:05 ET during EDT (UTC-4)
+    - cron: '5 5 * * *'   # 00:05 ET during EST (UTC-5)
   workflow_dispatch:
     inputs:
       from: { description: 'start date YYYY-MM-DD (optional)', required: false }
@@ -12,12 +16,29 @@ jobs:
   fetch:
     runs-on: ubuntu-latest
     steps:
+      - name: Skip the trigger that doesn't match today's ET offset
+        id: gate
+        if: github.event_name == 'schedule'
+        run: |
+          hour_utc=$(date -u +%H)
+          et_offset=$(TZ='America/New_York' date +%z)
+          want_hour=05
+          [ "$et_offset" = '-0400' ] && want_hour=04
+          if [ "$hour_utc" != "$want_hour" ]; then
+            echo "Not the active DST trigger (ET offset $et_offset wants ${want_hour}:00 UTC, this is $hour_utc:00 UTC) - skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@v4
+        if: steps.gate.outputs.skip != 'true'
       - uses: actions/setup-node@v4
+        if: steps.gate.outputs.skip != 'true'
         with: { node-version: '22' }
       - run: node scripts/fetch.mjs ${{ inputs.from }} ${{ inputs.to }}
+        if: steps.gate.outputs.skip != 'true'
       - run: node --test 'test/*.test.mjs'
+        if: steps.gate.outputs.skip != 'true'
       - name: Commit
+        if: steps.gate.outputs.skip != 'true'
         run: |
           git config user.name  'pipsarchive-bot'
           git config user.email 'bot@pipsarchive.com'
