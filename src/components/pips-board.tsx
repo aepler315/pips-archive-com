@@ -180,6 +180,7 @@ function Badge({
   filterId: string;
   counterRotate?: boolean;
 }) {
+  const clipId = useId().replace(/:/g, "");
   const s = Math.max(0.62, 0.44 + 0.1 * text.length);
   const stroke = status === "violated" ? "var(--color-bad-ink)" : "rgba(255,255,255,0.55)";
   const strokeWidth = status === "violated" ? 0.09 : 0.045;
@@ -189,6 +190,10 @@ function Badge({
   const vertex = s * Math.SQRT1_2;
   const tabW = s * 0.26;
   const tabH = s * 0.24;
+  // The diamond's top-left quadrant (toward the corner pip the badge sits
+  // over) is clipped away entirely, rather than just scaled down, so the
+  // pip underneath stays fully visible instead of merely uncovered.
+  const CUT = 2;
   return (
     // Scaled as a whole (diamond, tab, stroke and text together) around the
     // corner anchor, so it stays tucked into the same spot while covering
@@ -197,6 +202,13 @@ function Badge({
       transform={`translate(${x},${y}) ${counterRotate ? "rotate(-90) " : ""}scale(${BADGE_SCALE})`}
       className="pointer-events-none"
     >
+      <defs>
+        <clipPath id={clipId}>
+          <path
+            d={`M0,${-CUT} L${CUT},${-CUT} L${CUT},${CUT} L${-CUT},${CUT} L${-CUT},0 L0,0 Z`}
+          />
+        </clipPath>
+      </defs>
       <rect
         x={-tabW / 2}
         y={-vertex - tabH + s * 0.08}
@@ -205,18 +217,20 @@ function Badge({
         rx={tabW * 0.4}
         fill={swatch.badge}
       />
-      <rect
-        x={-s / 2}
-        y={-s / 2}
-        width={s}
-        height={s}
-        rx={s * 0.32}
-        transform="rotate(45)"
-        fill={swatch.badge}
-        stroke={stroke}
-        strokeWidth={strokeWidth}
-        filter={`url(#${filterId})`}
-      />
+      <g clipPath={`url(#${clipId})`}>
+        <rect
+          x={-s / 2}
+          y={-s / 2}
+          width={s}
+          height={s}
+          rx={s * 0.32}
+          transform="rotate(45)"
+          fill={swatch.badge}
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+          filter={`url(#${filterId})`}
+        />
+      </g>
       <text
         textAnchor="middle"
         dominantBaseline="central"
