@@ -186,13 +186,30 @@ function Badge({
   // Clamp multi-character labels ("<12", "≥10") to a safe width so they
   // can't spill past the diamond's edge regardless of glyph metrics.
   const maxTextWidth = s * 0.6;
+  // A small pointed tail pokes off the diamond's bottom-right edge (the
+  // rotated square's edge between its right and bottom vertices faces
+  // straight down-right) to give the badge a pin/flag silhouette.
+  const vertex = s * Math.SQRT1_2;
+  const tailT1 = 0.32;
+  const tailT2 = 0.68;
+  const tailBaseA = { x: vertex * (1 - tailT1), y: vertex * tailT1 };
+  const tailBaseB = { x: vertex * (1 - tailT2), y: vertex * tailT2 };
+  const tipOffset = (vertex * 0.55) / Math.SQRT2;
+  const tailTip = { x: vertex * 0.5 + tipOffset, y: vertex * 0.5 + tipOffset };
   return (
-    // Scaled as a whole (diamond, stroke and text together) around the
-    // corner anchor, so it stays tucked into the same spot.
+    // Scaled as a whole (diamond, tail, stroke and text together) around
+    // the corner anchor, so it stays tucked into the same spot.
     <g
       transform={`translate(${x},${y}) ${counterRotate ? "rotate(-90) " : ""}scale(${BADGE_SCALE})`}
       className="pointer-events-none"
     >
+      <path
+        d={`M${tailBaseA.x},${tailBaseA.y} L${tailTip.x},${tailTip.y} L${tailBaseB.x},${tailBaseB.y} Z`}
+        fill={swatch.badge}
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+        strokeLinejoin="round"
+      />
       <rect
         x={-s / 2}
         y={-s / 2}
