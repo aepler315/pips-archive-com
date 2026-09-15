@@ -161,6 +161,41 @@ function HalfTile({ cell, pip }: { cell: Cell; pip: number }) {
   );
 }
 
+/**
+ * A square turned 45° with rounded corners, its upper-left quadrant cropped
+ * away so the pip it sits over stays visible. The two 45° corners and the
+ * concave inner corner that the crop leaves behind are rounded too, rather
+ * than cut raw.
+ *
+ * Walks the outline clockwise from the top vertex: top, right, bottom and
+ * left vertices, then the inner corner at the centre. Each corner's arc
+ * starts a tangent length back from the corner point — r/tan(angle/2), so a
+ * 90° corner backs off by r and the sharper 45° ones by ~2.41r.
+ */
+function badgePath(s: number) {
+  const v = s * Math.SQRT1_2; // centre to any vertex (half the diagonal)
+  const d = Math.SQRT1_2; // unit step along a 45° edge
+  const rEdge = s * 0.28; // the two vertices the crop doesn't touch
+  const rTip = s * 0.09; // the 45° corners the crop creates
+  const rNotch = s * 0.2; // the concave corner at the centre
+  const tEdge = rEdge;
+  const tTip = rTip / Math.tan(Math.PI / 8);
+  const tNotch = rNotch;
+  return [
+    `M0,${-v + tTip}`,
+    `A${rTip},${rTip} 0 0 1 ${d * tTip},${-v + d * tTip}`,
+    `L${v - d * tEdge},${-d * tEdge}`,
+    `A${rEdge},${rEdge} 0 0 1 ${v - d * tEdge},${d * tEdge}`,
+    `L${d * tEdge},${v - d * tEdge}`,
+    `A${rEdge},${rEdge} 0 0 1 ${-d * tEdge},${v - d * tEdge}`,
+    `L${-v + d * tTip},${d * tTip}`,
+    `A${rTip},${rTip} 0 0 1 ${-v + tTip},0`,
+    `L${-tNotch},0`,
+    `A${rNotch},${rNotch} 0 0 0 0,${-tNotch}`,
+    "Z",
+  ].join(" ");
+}
+
 function Badge({
   x,
   y,
@@ -184,45 +219,28 @@ function Badge({
   const stroke = status === "violated" ? "var(--color-bad-ink)" : "rgba(255,255,255,0.55)";
   const strokeWidth = status === "violated" ? 0.09 : 0.045;
   // Clamp multi-character labels ("<12", "≥10") to a safe width so they
-  // can't spill past the diamond's edge regardless of glyph metrics.
+  // can't spill past the badge's edge regardless of glyph metrics.
   const maxTextWidth = s * 0.6;
-  // A small pointed tail pokes off the diamond's bottom-right edge (the
-  // rotated square's edge between its right and bottom vertices faces
-  // straight down-right) to give the badge a pin/flag silhouette.
-  const vertex = s * Math.SQRT1_2;
-  const tailT1 = 0.32;
-  const tailT2 = 0.68;
-  const tailBaseA = { x: vertex * (1 - tailT1), y: vertex * tailT1 };
-  const tailBaseB = { x: vertex * (1 - tailT2), y: vertex * tailT2 };
-  const tipOffset = (vertex * 0.55) / Math.SQRT2;
-  const tailTip = { x: vertex * 0.5 + tipOffset, y: vertex * 0.5 + tipOffset };
+  // Re-centre the label into what's left of the diamond once the upper-left
+  // quadrant is gone, so it doesn't crowd the notch.
+  const textOffset = s * 0.1;
   return (
-    // Scaled as a whole (diamond, tail, stroke and text together) around
-    // the corner anchor, so it stays tucked into the same spot.
+    // Scaled as a whole (badge, stroke and text together) around the corner
+    // anchor, so it stays tucked into the same spot.
     <g
       transform={`translate(${x},${y}) ${counterRotate ? "rotate(-90) " : ""}scale(${BADGE_SCALE})`}
       className="pointer-events-none"
     >
       <path
-        d={`M${tailBaseA.x},${tailBaseA.y} L${tailTip.x},${tailTip.y} L${tailBaseB.x},${tailBaseB.y} Z`}
-        fill={swatch.badge}
-        stroke={stroke}
-        strokeWidth={strokeWidth}
-        strokeLinejoin="round"
-      />
-      <rect
-        x={-s / 2}
-        y={-s / 2}
-        width={s}
-        height={s}
-        rx={s * 0.32}
-        transform="rotate(45)"
+        d={badgePath(s)}
         fill={swatch.badge}
         stroke={stroke}
         strokeWidth={strokeWidth}
         filter={`url(#${filterId})`}
       />
       <text
+        x={textOffset}
+        y={textOffset}
         textAnchor="middle"
         dominantBaseline="central"
         fill="#fff"
