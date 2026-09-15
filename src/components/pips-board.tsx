@@ -194,6 +194,13 @@ function Badge({
   // over) is clipped away entirely, rather than just scaled down, so the
   // pip underneath stays fully visible instead of merely uncovered.
   const CUT = 2;
+  // Re-center the label within what's left of the diamond after that
+  // corner is gone, or it reads as crowded into the remaining pentagon's
+  // one sharp corner instead of sitting in its visual middle.
+  const textOffset = vertex * 0.14;
+  // Clamp multi-character labels ("<12", "≥10") to a safe width so they
+  // can't spill past the diamond's edge regardless of glyph metrics.
+  const maxTextWidth = s * 0.6;
   return (
     // Scaled as a whole (diamond, tab, stroke and text together) around the
     // corner anchor, so it stays tucked into the same spot while covering
@@ -232,11 +239,15 @@ function Badge({
         />
       </g>
       <text
+        x={textOffset}
+        y={textOffset}
         textAnchor="middle"
         dominantBaseline="central"
         fill="#fff"
-        fontSize={text.length > 2 ? 0.38 : 0.46}
+        fontSize={text.length > 2 ? 0.34 : text.length > 1 ? 0.4 : 0.46}
         fontWeight={700}
+        textLength={text.length > 1 ? maxTextWidth : undefined}
+        lengthAdjust={text.length > 1 ? "spacingAndGlyphs" : undefined}
         style={{ fontFamily: "var(--font-sans)" }}
       >
         {text}
