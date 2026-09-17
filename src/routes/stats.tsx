@@ -171,8 +171,8 @@ function StatsPage() {
           <AlertDialogContent>
             <AlertDialogTitle>Erase all solve data?</AlertDialogTitle>
             <AlertDialogDescription>
-              Every solve time and in-progress board in this browser is deleted. Export a copy
-              first if you want to keep it — this can&apos;t be undone.
+              Every solve time and in-progress board in this browser is deleted. Export a copy first
+              if you want to keep it — this can&apos;t be undone.
             </AlertDialogDescription>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -197,14 +197,19 @@ function StatsPage() {
             const f = e.target.files?.[0];
             if (!f) return;
             try {
-              const { imported, progress, skipped } = importAll(await f.text());
+              const { imported, progress, skipped, failed } = importAll(await f.text());
               const text =
                 `Imported ${imported} result${imported === 1 ? "" : "s"}.` +
                 (progress
                   ? ` Restored ${progress} unfinished board${progress === 1 ? "" : "s"}.`
                   : "") +
-                (skipped ? ` Skipped ${skipped} malformed entr${skipped === 1 ? "y" : "ies"}.` : "");
-              setImportStatus({ ok: true, text });
+                (skipped
+                  ? ` Skipped ${skipped} malformed entr${skipped === 1 ? "y" : "ies"}.`
+                  : "") +
+                (failed
+                  ? ` Could not save ${failed} entries. Browser storage may be full or unavailable; keep your backup and try again.`
+                  : "");
+              setImportStatus({ ok: failed === 0, text });
               setRev((x) => x + 1);
             } catch (err) {
               setImportStatus({ ok: false, text: `Import failed: ${(err as Error).message}` });

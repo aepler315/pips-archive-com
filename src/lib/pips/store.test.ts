@@ -1,6 +1,14 @@
+import { parsePuzzle } from "./engine";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { allResults, exportAll, getProgress, importAll, saveProgress } from "./store.ts";
+import {
+  allResults,
+  exportAll,
+  getProgress,
+  importAll,
+  saveProgress,
+  recordSolve,
+} from "./store.ts";
 
 class MemoryStorage {
   private data = new Map<string, string>();
@@ -40,12 +48,31 @@ function withStorage(run: (storage: MemoryStorage) => void) {
 
 test("import restores an unfinished board included in an archive backup", () => {
   withStorage(() => {
-    saveProgress("2026-09-11", "hard", [{ cells: [[0, 0], [0, 1]] }], 12_345);
+    saveProgress(
+      "2026-09-11",
+      "hard",
+      [
+        {
+          cells: [
+            [0, 0],
+            [0, 1],
+          ],
+        },
+      ],
+      12_345,
+    );
     const backup = exportAll();
     const { imported, progress, skipped } = importAll(backup);
     assert.deepEqual({ imported, progress, skipped }, { imported: 0, progress: 1, skipped: 0 });
     assert.deepEqual(getProgress("2026-09-11", "hard"), {
-      state: [{ cells: [[0, 0], [0, 1]] }],
+      state: [
+        {
+          cells: [
+            [0, 0],
+            [0, 1],
+          ],
+        },
+      ],
       elapsed: 12_345,
     });
   });
@@ -68,4 +95,164 @@ test("allResults treats denied browser storage as an empty archive", () => {
     if (originalStorage) Object.defineProperty(globalThis, "localStorage", originalStorage);
     else delete (globalThis as { localStorage?: Storage }).localStorage;
   }
+});
+
+const validResult = {
+  first: 2000,
+  best: 1000,
+  plays: 2,
+  solvedAt: "2026-09-14T00:00:00Z",
+  lastAt: "2026-09-15T00:00:00Z",
+};
+const backup = (data: Record<string, unknown>) => JSON.stringify({ version: 1, data });
+
+test("imported result fields cannot override the date and level from the key", () => {
+  withStorage(() => {
+    importAll(
+      backup({
+        "pips-archive:v1:result:2026-09-14:easy": { ...validResult, date: 42, level: "bogus" },
+        "pips-archive:v1:result:2026-09-15:easy": validResult,
+      }),
+    );
+    assert.deepEqual(
+      allResults().map(({ date, level }) => ({ date, level })),
+      [
+        { date: "2026-09-14", level: "easy" },
+        { date: "2026-09-15", level: "easy" },
+      ],
+    );
+  });
+});
+test("invalid result keys and invalid numeric or timestamp values are rejected", () => {
+  withStorage(() => {
+    const result = importAll(
+      backup({
+        "pips-archive:v1:result:2026-02-30:easy": validResult,
+        "pips-archive:v1:result:2026-09-14:bogus": validResult,
+        "pips-archive:v1:result:2026-09-14:easy": { ...validResult, best: -1 },
+        "pips-archive:v1:result:2026-09-15:easy": { ...validResult, plays: 1.5 },
+        "pips-archive:v1:result:2026-09-16:easy": { ...validResult, lastAt: "yesterday" },
+      }),
+    );
+    assert.equal(result.imported, 0);
+    assert.equal(result.skipped, 5);
+    assert.deepEqual(allResults(), []);
+  });
+});
+test("reading corrupt existing records does not crash the archive", () => {
+  withStorage((storage) => {
+    storage.setItem("pips-archive:v1:result:2026-09-14:easy", '{"date":42}');
+    storage.setItem("pips-archive:v1:result:2026-09-15:easy", JSON.stringify(validResult));
+    assert.equal(allResults().length, 1);
+  });
+});
+test("imports reject overlapping and nonadjacent placements", () => {
+  withStorage(() => {
+    const result = importAll(
+      backup({
+        "pips-archive:v1:progress:2026-09-14:easy": {
+          elapsed: 10,
+          state: [
+            {
+              cells: [
+                [0, 0],
+                [2, 0],
+              ],
+            },
+          ],
+        },
+        "pips-archive:v1:progress:2026-09-15:easy": {
+          elapsed: 10,
+          state: [
+            {
+              cells: [
+                [0, 0],
+                [0, 1],
+              ],
+            },
+            {
+              cells: [
+                [0, 0],
+                [1, 0],
+              ],
+            },
+          ],
+        },
+      }),
+    );
+    assert.equal(result.progress, 0);
+    assert.equal(result.skipped, 2);
+  });
+});
+test("quota failures are reported without claiming an import succeeded", () => {
+  withStorage((storage) => {
+    storage.setItem = () => {
+      throw new Error("quota");
+    };
+    const result = importAll(backup({ "pips-archive:v1:result:2026-09-15:easy": validResult }));
+    assert.equal(result.imported, 0);
+    assert.equal((result as { failed?: number }).failed, 1);
+    assert.deepEqual(allResults(), []);
+    assert.equal(saveProgress("2026-09-15", "easy", [null], 100), false);
+  });
+});
+
+test("impossible timestamp dates are rejected instead of silently normalized", () => {
+  withStorage(() => {
+    const result = importAll(
+      backup({
+        "pips-archive:v1:result:2026-09-15:easy": {
+          ...validResult,
+          solvedAt: "2026-02-30T00:00:00Z",
+        },
+      }),
+    );
+    assert.equal(result.imported, 0);
+    assert.equal(result.skipped, 1);
+  });
+});
+test("a failed solve write preserves the previously saved board", () => {
+  withStorage((storage) => {
+    saveProgress("2026-09-15", "easy", [null], 12345);
+    storage.setItem = () => {
+      throw new Error("quota");
+    };
+    assert.equal(recordSolve("2026-09-15", "easy", 15000).saved, false);
+    assert.equal(getProgress("2026-09-15", "easy")?.elapsed, 12345);
+  });
+});
+
+test("restored progress must fit the actual puzzle, including its domino count", () => {
+  const puzzle = parsePuzzle({
+    dominoes: [[1, 2]],
+    regions: [
+      {
+        indices: [
+          [0, 0],
+          [0, 1],
+        ],
+        type: "empty",
+      },
+    ],
+  });
+  withStorage(() => {
+    saveProgress(
+      "2026-09-15",
+      "easy",
+      [
+        {
+          cells: [
+            [9, 9],
+            [9, 10],
+          ],
+        },
+      ],
+      1000,
+    );
+    assert.equal(getProgress("2026-09-15", "easy", puzzle), null);
+    saveProgress("2026-09-15", "easy", [null, null], 1000);
+    assert.equal(getProgress("2026-09-15", "easy", puzzle), null);
+    saveProgress("2026-09-15", "easy", [null], 12345);
+    assert.equal(getProgress("2026-09-15", "easy", puzzle)?.elapsed, 12345);
+  });
 });
