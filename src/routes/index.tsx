@@ -10,8 +10,8 @@ import { prefetchDay } from "@/lib/pips/days";
 import { resultKeyOf } from "@/lib/pips/random";
 import { groupMonths, monthChip, monthLabel, resolveMonth } from "@/lib/pips/months";
 import { allResults, fmt, type Result } from "@/lib/pips/store";
-import type { ArchiveIndex, IndexEntry } from "@/lib/pips/types";
-import archiveJson from "@/data/archive.json";
+import type { IndexEntry } from "@/lib/pips/types";
+import { useArchiveIndex } from "@/lib/pips/use-archive";
 import { cn } from "@/lib/utils";
 
 type Search = { month?: string };
@@ -60,7 +60,7 @@ function weekdayLabels() {
 
 function Home() {
   const { month: requested } = Route.useSearch();
-  const idx = archiveJson as ArchiveIndex;
+  const idx = useArchiveIndex();
   const [browser, setBrowser] = useState(false);
   useEffect(() => setBrowser(true), []);
 
@@ -138,12 +138,20 @@ function Home() {
               to="/"
               search={{ month: older }}
               aria-label="Older month"
-              className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "size-8 no-underline sm:size-10")}
+              className={cn(
+                buttonVariants({ variant: "ghost", size: "icon" }),
+                "size-8 no-underline sm:size-10",
+              )}
             >
               <ChevronLeft className="size-4 sm:size-5" />
             </Link>
           ) : (
-            <span className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "size-8 opacity-40 sm:size-10")}>
+            <span
+              className={cn(
+                buttonVariants({ variant: "ghost", size: "icon" }),
+                "size-8 opacity-40 sm:size-10",
+              )}
+            >
               <ChevronLeft className="size-4 sm:size-5" />
             </span>
           )}
@@ -155,12 +163,20 @@ function Home() {
               to="/"
               search={{ month: newer }}
               aria-label="Newer month"
-              className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "size-8 no-underline sm:size-10")}
+              className={cn(
+                buttonVariants({ variant: "ghost", size: "icon" }),
+                "size-8 no-underline sm:size-10",
+              )}
             >
               <ChevronRight className="size-4 sm:size-5" />
             </Link>
           ) : (
-            <span className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "size-8 opacity-40 sm:size-10")}>
+            <span
+              className={cn(
+                buttonVariants({ variant: "ghost", size: "icon" }),
+                "size-8 opacity-40 sm:size-10",
+              )}
+            >
               <ChevronRight className="size-4 sm:size-5" />
             </span>
           )}

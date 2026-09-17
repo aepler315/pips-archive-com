@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import type { Cell, GameState, Puzzle, RegionStatus } from "@/lib/pips/engine";
 import { key, labelText, occupancy, regionDescription, snapPlacement } from "@/lib/pips/engine";
 import { colorRegions, swatchFor, type Swatch } from "@/lib/pips/colors";
@@ -270,9 +270,13 @@ export function PipsBoard({
   onBackground,
 }: Props) {
   const uid = useId().replace(/:/g, "");
-  const cells = puzzleCells(puzzle);
-  const b = boundsOf(cells);
-  const assigned = colorRegions(puzzle);
+  const b = useMemo(() => boundsOf(puzzleCells(puzzle)), [puzzle]);
+  const assigned = useMemo(() => colorRegions(puzzle), [puzzle]);
+  const outlines = useMemo(
+    () => puzzle.regions.map((reg) => unionPath(reg.cells, BOARD.radius, BOARD.inset)),
+    [puzzle],
+  );
+  const anchors = useMemo(() => puzzle.regions.map(badgeAnchor), [puzzle]);
   const pad = 0.4;
   const vbX = b.minC - pad;
   const vbY = b.minR - pad;
@@ -406,7 +410,7 @@ export function PipsBoard({
           const st = statuses[i];
           let fill = sw.fill;
           if (st === "violated") fill = `color-mix(in oklab, #e8b0a8 45%, ${sw.fill})`;
-          const d = unionPath(reg.cells, BOARD.radius, BOARD.inset);
+          const d = outlines[i];
           return (
             <g key={`r${i}`} className="pointer-events-none" filter={`url(#${uid}-shadow)`}>
               {reg.cells.map(([r, c], j) => (
@@ -467,7 +471,7 @@ export function PipsBoard({
           const t = labelText(reg);
           if (!t) return null;
           const sw = swatchFor(assigned, i);
-          const pos = badgeAnchor(reg);
+          const pos = anchors[i];
           return (
             <Badge
               key={`b${i}`}

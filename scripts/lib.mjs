@@ -1,26 +1,40 @@
-import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { validatePayload, describe, LEVELS } from '../js/engine.js';
+import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { validatePayload, describe, LEVELS } from "../js/engine.js";
 
-export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-export const PUZZLE_DIR = join(ROOT, 'data', 'puzzles');
-export const INDEX_PATH = join(ROOT, 'data', 'index.json');
-export const APP_INDEX_PATH = join(ROOT, 'src', 'data', 'archive.json');
-export const LAUNCH_DATE = '2025-08-18';
+export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+export const PUZZLE_DIR = join(ROOT, "data", "puzzles");
+export const INDEX_PATH = join(ROOT, "data", "index.json");
+export const APP_INDEX_PATH = join(ROOT, "src", "data", "archive.json");
+export const LAUNCH_DATE = "2025-08-18";
 
 export const isoDate = (d) => d.toISOString().slice(0, 10);
-export const todayNY = () => new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+export const todayNY = () => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const part = (type) => parts.find((p) => p.type === type).value;
+  return new Date(`${part("year")}-${part("month")}-${part("day")}T00:00:00Z`);
+};
+export const isDate = (value) =>
+  /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+  Number.isFinite(Date.parse(value)) &&
+  isoDate(new Date(value)) === value;
 
 export function* dateRange(from, to) {
-  const d = new Date(from + 'T00:00:00Z'), end = new Date(to + 'T00:00:00Z');
+  const d = new Date(from + "T00:00:00Z"),
+    end = new Date(to + "T00:00:00Z");
   for (; d <= end; d.setUTCDate(d.getUTCDate() + 1)) yield isoDate(d);
 }
 
 // Validate and write one raw payload. Returns true if written.
 export function savePayload(raw, { overwrite = false } = {}) {
   const problems = validatePayload(raw);
-  if (problems.length) throw new Error(`${raw?.printDate}: ${problems.join('; ')}`);
+  if (problems.length) throw new Error(`${raw?.printDate}: ${problems.join("; ")}`);
   mkdirSync(PUZZLE_DIR, { recursive: true });
   const out = join(PUZZLE_DIR, `${raw.printDate}.json`);
   if (existsSync(out) && !overwrite) return false;
@@ -29,24 +43,48 @@ export function savePayload(raw, { overwrite = false } = {}) {
 }
 
 export function listDates() {
-  return readdirSync(PUZZLE_DIR).filter((f) => /^\d{4}-\d{2}-\d{2}\.json$/.test(f))
-    .map((f) => f.slice(0, 10)).sort();
+  return readdirSync(PUZZLE_DIR)
+    .filter((f) => /^\d{4}-\d{2}-\d{2}\.json$/.test(f))
+    .map((f) => f.slice(0, 10))
+    .sort();
 }
 
 export function buildIndex() {
   const dates = listDates();
   const entries = dates.map((date) => {
-    const raw = JSON.parse(readFileSync(join(PUZZLE_DIR, `${date}.json`), 'utf8'));
+    const raw = JSON.parse(readFileSync(join(PUZZLE_DIR, `${date}.json`), "utf8"));
     const levels = {};
     for (const lvl of LEVELS) levels[lvl] = describe(raw, lvl);
     return { date, editor: raw.editor ?? null, levels };
   });
-  const index = { generated: new Date().toISOString(), first: dates[0] ?? null,
-                  last: dates.at(-1) ?? null, count: dates.length, puzzles: entries };
-  writeFileSync(INDEX_PATH, JSON.stringify(index));
+  const index = {
+    generated: new Date().toISOString(),
+    first: dates[0] ?? null,
+    last: dates.at(-1) ?? null,
+    count: dates.length,
+    puzzles: entries,
+  };
+  // Retain the generation time when the content did not change. Recovery runs
+  // must not create commits or deployments solely because a clock advanced.
+  try {
+    const previous = JSON.parse(readFileSync(INDEX_PATH, "utf8"));
+    if (
+      JSON.stringify({ ...previous, generated: null }) ===
+      JSON.stringify({ ...index, generated: null })
+    ) {
+      index.generated = previous.generated;
+    }
+  } catch {
+    /* first build, or repair a corrupt index */
+  }
+  const text = JSON.stringify(index);
+  const writeChanged = (path) => {
+    if (!existsSync(path) || readFileSync(path, "utf8") !== text) writeFileSync(path, text);
+  };
+  writeChanged(INDEX_PATH);
   // The TanStack app bundles its own copy so the archive page needs no fetch;
   // keep it in lockstep with data/index.json on every build.
   mkdirSync(dirname(APP_INDEX_PATH), { recursive: true });
-  writeFileSync(APP_INDEX_PATH, JSON.stringify(index));
+  writeChanged(APP_INDEX_PATH);
   return index;
 }

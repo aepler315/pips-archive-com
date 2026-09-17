@@ -14,7 +14,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "pretest": "node scripts/sync-public-data.mjs",
-    "test": "node --test 'test/*.test.mjs' && npx tsx --test src/lib/pips/*.test.ts",
+    "test": "node --test 'test/*.test.mjs' && node --import tsx --test src/lib/pips/*.test.ts",
     "lint": "eslint .",
     "fetch": "node scripts/fetch.mjs",
     "backfill": "node scripts/fetch.mjs --all",
@@ -84,6 +84,7 @@
     "nitro": "3.0.260610-beta",
     "playwright": "^1.62.0",
     "prettier": "^3.4.0",
+    "tsx": "4.23.13",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.56.1",
     "vite": "^8.2.0"

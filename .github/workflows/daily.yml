@@ -1,47 +1,82 @@
 name: Fetch today's puzzle
 on:
   schedule:
-    # GitHub Actions cron is UTC-only, so midnight America/New_York (the NYT's
-    # own rollover) needs two fixed triggers, one per DST regime; the gate
-    # step below no-ops whichever one doesn't match today's actual ET offset.
-    - cron: '5 4 * * *'   # 00:05 ET during EDT (UTC-4)
-    - cron: '5 5 * * *'   # 00:05 ET during EST (UTC-5)
+    - cron: '5,20,35,50 0 * * *'
+      timezone: America/New_York
+    - cron: '17 1-23 * * *'
+      timezone: America/New_York
   workflow_dispatch:
     inputs:
       from: { description: 'start date YYYY-MM-DD (optional)', required: false }
-      to:   { description: 'end date YYYY-MM-DD (optional)', required: false }
+      to: { description: 'end date YYYY-MM-DD (optional)', required: false }
 permissions:
-  contents: write
+  contents: read
+concurrency:
+  group: puzzle-data
+  cancel-in-progress: false
 jobs:
   fetch:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
+      ingest_failed: ${{ steps.ingest.outcome == 'failure' }}
     steps:
-      - name: Skip the trigger that doesn't match today's ET offset
-        id: gate
-        if: github.event_name == 'schedule'
-        run: |
-          hour_utc=$(date -u +%H)
-          et_offset=$(TZ='America/New_York' date +%z)
-          want_hour=05
-          [ "$et_offset" = '-0400' ] && want_hour=04
-          if [ "$hour_utc" != "$want_hour" ]; then
-            echo "Not the active DST trigger (ET offset $et_offset wants ${want_hour}:00 UTC, this is $hour_utc:00 UTC) - skipping."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          fi
       - uses: actions/checkout@v4
-        if: steps.gate.outputs.skip != 'true'
+        with: { ref: main }
       - uses: actions/setup-node@v4
-        if: steps.gate.outputs.skip != 'true'
         with: { node-version: '22' }
-      - run: node scripts/fetch.mjs ${{ inputs.from }} ${{ inputs.to }}
-        if: steps.gate.outputs.skip != 'true'
-      - run: node --test 'test/*.test.mjs'
-        if: steps.gate.outputs.skip != 'true'
-      - name: Commit
-        if: steps.gate.outputs.skip != 'true'
+      - name: Fetch missing puzzles
+        id: ingest
+        continue-on-error: true
+        env:
+          FROM_DATE: ${{ inputs.from }}
+          TO_DATE: ${{ inputs.to }}
         run: |
-          git config user.name  'pipsarchive-bot'
+          for value in "$FROM_DATE" "$TO_DATE"; do
+            if [[ -n "$value" && ! "$value" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+              echo 'Dates must use YYYY-MM-DD.' >&2
+              exit 1
+            fi
+          done
+          args=()
+          if [ -n "$FROM_DATE" ]; then args+=("$FROM_DATE"); fi
+          if [ -n "$TO_DATE" ]; then
+            if [ -z "$FROM_DATE" ]; then echo 'A start date is required with an end date.' >&2; exit 1; fi
+            args+=("$TO_DATE")
+          fi
+          node scripts/fetch.mjs "${args[@]}"
+      - run: node --test 'test/*.test.mjs'
+      - name: Commit changed data
+        id: commit
+        run: |
+          git config user.name 'pipsarchive-bot'
           git config user.email 'bot@pipsarchive.com'
           git add data src/data/archive.json
-          git diff --cached --quiet || git commit -m "puzzle data $(date -u +%F)"
-          git push
+          if git diff --cached --quiet; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git commit -m "puzzle data $(date -u +%F)"
+          git pull --rebase origin main
+          git push origin HEAD:main
+          echo 'changed=true' >> "$GITHUB_OUTPUT"
+  deploy:
+    needs: fetch
+    if: needs.fetch.outputs.changed == 'true'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/deploy.yml
+  report:
+    needs: [fetch, deploy]
+    if: always() && needs.fetch.outputs.ingest_failed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report incomplete ingestion
+        run: |
+          echo 'Some requested puzzles could not be fetched. Valid new puzzles were retained; inspect the fetch log and retry.' >&2
+          exit 1

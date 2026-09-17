@@ -6,6 +6,8 @@ const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffec
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { RotateCw, TriangleAlert } from "lucide-react";
 import { PipsBoard } from "@/components/pips-board";
+import { PlayClock } from "@/components/play-clock";
+import { createClock } from "@/lib/pips/clock";
 import { PipsTray } from "@/components/pips-tray";
 import { SiteHeader } from "@/components/site-header";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -39,7 +41,6 @@ import {
 } from "@/lib/pips/engine";
 import {
   clearProgress,
-  clockMs,
   fmt,
   getProgress,
   getResult,
@@ -51,8 +52,7 @@ import { loadDay } from "@/lib/pips/days";
 import { boundsOf, puzzleCells } from "@/lib/pips/geometry";
 import { displayedGrid, mobileBoardMaxHeight, mobileBoardOrientation } from "@/lib/pips/layout";
 import { nextPuzzleTarget } from "@/lib/pips/months";
-import type { ArchiveIndex } from "@/lib/pips/types";
-import archiveJson from "@/data/archive.json";
+import { useArchiveIndex } from "@/lib/pips/use-archive";
 
 export const Route = createFileRoute("/play/$date/$level")({
   loader: async ({ params }) => {
@@ -107,7 +107,11 @@ function PlayPage() {
           {loadError ? "Check your connection and try again." : "It may not be archived yet."}{" "}
           <Link to="/">Back to the archive</Link>.
         </p>
-        {loadError ? <Button className="mt-4 self-start" onClick={() => location.reload()}>Try again</Button> : null}
+        {loadError ? (
+          <Button className="mt-4 self-start" onClick={() => location.reload()}>
+            Try again
+          </Button>
+        ) : null}
       </Shell>
     );
   }
@@ -253,15 +257,22 @@ function SelectedDominoControls({
   if (selected == null) return null;
   return (
     <div className="mt-2 flex items-center gap-2" aria-label="Selected domino controls">
-      <Button variant="secondary" size="sm" onClick={onRotate}>Rotate</Button>
-      <Button variant="secondary" size="sm" onClick={onFlip}>Flip</Button>
-      <Button variant="ghost" size="sm" onClick={onRemove}>Remove</Button>
+      <Button variant="secondary" size="sm" onClick={onRotate}>
+        Rotate
+      </Button>
+      <Button variant="secondary" size="sm" onClick={onFlip}>
+        Flip
+      </Button>
+      <Button variant="ghost" size="sm" onClick={onRemove}>
+        Remove
+      </Button>
     </div>
   );
 }
 
 function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay }) {
   const puzzle = useMemo(() => parsePuzzle(raw[level]), [raw, level]);
+  const archive = useArchiveIndex();
   const dateLabel = useMemo(
     () =>
       new Date(date + "T12:00:00").toLocaleDateString(undefined, {
@@ -317,10 +328,8 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const [solveMs, setSolveMs] = useState<number | null>(null);
   const [solveDetail, setSolveDetail] = useState("");
   const [justCopied, setJustCopied] = useState(false);
-  const [, setNow] = useState(0);
-
-  const elapsedRef = useRef(0);
-  const tickStart = useRef<number | null>(null);
+  const [clock] = useState(createClock);
+  const [saveFailed, setSaveFailed] = useState(false);
   const solvedRef = useRef(false);
   const stateRef = useRef(state);
   const selRef = useRef<Sel>(null);
@@ -350,9 +359,6 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     selRef.current = s;
     setSel(s);
   }
-  if (tickStart.current === null && !solvedRef.current) {
-    tickStart.current = performance.now();
-  }
 
   const ev = useMemo(() => evaluate(puzzle, state), [puzzle, state]);
   // The remaining empty cells can only ever be a dead end if no perfect
@@ -363,18 +369,12 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     [puzzle, state, ev.solved],
   );
 
-  const nowElapsed = () => clockMs(elapsedRef.current, tickStart.current, performance.now());
+  const nowElapsed = () => clock.read(performance.now());
 
   const startClock = () => {
-    if (tickStart.current === null && !solvedRef.current) tickStart.current = performance.now();
+    if (!document.hidden && !solvedRef.current) clock.start(performance.now());
   };
-
-  const stopClock = () => {
-    if (tickStart.current !== null) {
-      elapsedRef.current = clockMs(elapsedRef.current, tickStart.current, performance.now());
-      tickStart.current = null;
-    }
-  };
+  const stopClock = () => clock.stop(performance.now());
 
   // Passive lifecycle saves (tab hidden/closed) only write when this
   // session has actually touched the board — an empty board it never
@@ -385,12 +385,11 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const safeSave = () => {
     if (solvedRef.current) return;
     if (!touchedRef.current && !stateRef.current.some(Boolean)) return;
-    saveProgress(date, level, stateRef.current, nowElapsed());
+    setSaveFailed(!saveProgress(date, level, stateRef.current, nowElapsed()));
   };
 
   useEffect(() => {
     startClock();
-    const id = setInterval(() => setNow((n) => n + 1), 250);
     const vis = () => {
       if (document.hidden) {
         stopClock();
@@ -405,10 +404,12 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
       safeSave();
     };
     addEventListener("pagehide", hide);
+    addEventListener("pageshow", startClock);
     return () => {
-      clearInterval(id);
       document.removeEventListener("visibilitychange", vis);
       removeEventListener("pagehide", hide);
+      removeEventListener("pageshow", startClock);
+      stopClock();
       safeSave();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -420,7 +421,11 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
         // A focused board cell is a real keyboard control. Let Tab move out
         // of it to the selected-domino controls instead of stealing the key
         // for the desktop rotation shortcut.
-        if ((e.target as Element | null)?.closest('[role="button"], button, a, input, select, textarea')) {
+        if (
+          (e.target as Element | null)?.closest(
+            '[role="button"], button, a, input, select, textarea',
+          )
+        ) {
           return;
         }
         tabHeld.current = true;
@@ -475,32 +480,33 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
 
   useEffect(() => {
     if (stateRef.current.some(Boolean)) return;
-    const p = getProgress(date, level);
-    if (p?.state?.some(Boolean) && p.state.length === puzzle.dominoes.length) {
+    const p = getProgress(date, level, puzzle);
+    if (p) {
       stateRef.current = p.state;
       setState(p.state);
-      elapsedRef.current = p.elapsed ?? 0;
-      setNow((n) => n + 1);
+      clock.restore(p.elapsed);
     }
-  }, [date, level, puzzle.dominoes.length]);
+  }, [date, level, puzzle, clock]);
 
   const solvedBannerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (ev.solved && !solvedRef.current) {
-      const ms = nowElapsed();
-      stopClock();
+      const now = performance.now();
+      const ms = clock.read(now);
+      clock.stop(now);
       solvedRef.current = true;
       setSolvedFlag(true);
       holdSel(null);
       holdAnchor(null);
       const res = recordSolve(date, level, ms);
+      setSaveFailed(!res.saved);
       setSolveMs(ms);
       setSolveDetail(
         res.plays > 1 ? `Best ${fmt(res.best)} over ${res.plays} plays.` : "First solve.",
       );
     }
-  }, [ev.solved, date, level]);
+  }, [ev.solved, date, level, clock]);
 
   useEffect(() => {
     if (solveMs === null) return;
@@ -537,7 +543,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     startClock();
     stateRef.current = next;
     setState(next);
-    if (!solvedRef.current) saveProgress(date, level, next, nowElapsed());
+    if (!solvedRef.current) setSaveFailed(!saveProgress(date, level, next, nowElapsed()));
   }
 
   function undo() {
@@ -774,8 +780,8 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
 
   const prior = hydrated ? getResult(date, level) : null;
   const nextTarget = useMemo(
-    () => nextPuzzleTarget((archiveJson as ArchiveIndex).puzzles, date, level),
-    [date, level],
+    () => nextPuzzleTarget(archive.puzzles, date, level),
+    [archive, date, level],
   );
 
   const boardStage = (
@@ -843,15 +849,15 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
             );
           })}
         </div>
-        <div
-          className={cn(
-            "min-w-[4.5ch] text-right font-medium text-[1.35rem] tabular-nums",
-            tickStart.current === null && "text-muted-foreground",
-          )}
-        >
-          {fmt(nowElapsed())}
-        </div>
+        <PlayClock clock={clock} stopped={solvedFlag} />
       </div>
+
+      {saveFailed ? (
+        <p role="alert" className="mb-3 text-sm text-bad-ink">
+          Your latest progress could not be saved. Browser storage may be full or unavailable. Keep
+          this tab open and export your saved data before clearing any storage.
+        </p>
+      ) : null}
 
       {solveMs !== null ? (
         <div
