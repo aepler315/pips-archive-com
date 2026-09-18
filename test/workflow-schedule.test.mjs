@@ -65,3 +65,21 @@ test("daily workflow retries at least every ten minutes for two hours after New 
     `retry gap is ${Math.max(...gaps)} minutes: ${attempts.join(", ")}`,
   );
 });
+
+test("daily workflow keeps at least hourly catch-up attempts for the rest of the New York day", () => {
+  const workflow = readFileSync(".github/workflows/daily.yml", "utf8");
+  const attempts = scheduledLocalMinutes(workflow, "America/New_York").filter(
+    (minute) => minute >= 120,
+  );
+
+  assert.ok(attempts.length > 0, "daily workflow must keep retrying after the midnight window");
+  const gaps = [
+    attempts[0] - 120,
+    ...attempts.slice(1).map((minute, index) => minute - attempts[index]),
+    24 * 60 - attempts.at(-1),
+  ];
+  assert.ok(
+    Math.max(...gaps) <= 60,
+    `catch-up gap is ${Math.max(...gaps)} minutes: ${attempts.join(", ")}`,
+  );
+});
