@@ -29,7 +29,8 @@ No backend, no accounts — everything a visitor does lives in their browser's l
 - `test/engine.test.mjs` – validates the whole corpus against `js/engine.js` (every embedded
   solution must solve). `src/lib/pips/engine.test.ts` – unit tests for the shipping engine.
 - `.github/workflows/daily.yml` – timezone-aware cron that catches up missing puzzles and commits
-  changed data. It retries near midnight and hourly afterward; late runners still fetch.
+  changed data. Because GitHub schedules are best-effort, it retries every five minutes for the
+  first two hours after New York midnight, then hourly; late runners still catch up.
 - `.github/workflows/ci.yml` – typecheck, lint, test and build on every push and PR.
 - `.github/workflows/deploy.yml` – reusable Pages build/deploy workflow, called after changed
   puzzle data, on pushes to `main`, or manually.
@@ -73,6 +74,7 @@ point an A/ALIAS record at GitHub Pages. Run the "Fetch today's puzzle" workflow
 confirm NYT serves GitHub's runners. The daily workflow calls the reusable deployment workflow
 only after it commits changed data (bot pushes alone do not trigger push workflows). An unchanged
 fetch leaves both index timestamps intact and skips deployment. Failed requests, including range
-backfills, leave the workflow red, while successfully validated additions are committed and deployed. Schedules are best-effort: GitHub can delay runs, so exact midnight
-publication is not guaranteed. The default fetch fills gaps between the first archived date and
+backfills, leave the workflow red, while successfully validated additions are committed and deployed. Schedules are best-effort: GitHub can delay or drop runs, so exact midnight publication is not
+guaranteed. Dense retries through 1:59 a.m. New York time bound the normal retry gap to five minutes
+when at least one scheduled event is delivered. The default fetch fills gaps between the first archived date and
 today; `--all` also fills any dates missing before the first archived file.
