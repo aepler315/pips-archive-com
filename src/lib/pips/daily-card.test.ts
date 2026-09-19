@@ -56,3 +56,22 @@ test("completed card keeps date and times without redundant labels or decoration
   );
   assert.doesNotMatch(html, /<span><\/span>/);
 });
+
+test("averages and shares stay visible even without rotating facts", () => {
+  const result = { first: 60000, best: 1000, plays: 9, solvedAt: "", lastAt: "" };
+  const html = renderToStaticMarkup(
+    React.createElement(card.DailyResultsCard, {
+      summary: buildDailyResults("2026-09-19", { easy: result, medium: result, hard: result }),
+      facts: [],
+      metrics: {
+        easy: { averageMs: 90000, count: 2, sharePercent: 100 / 3 },
+        medium: { averageMs: 60000, count: 1, sharePercent: 100 / 3 },
+        hard: { averageMs: null, count: 0, sharePercent: 100 / 3 },
+      },
+    }),
+  );
+  assert.match(html, /Average 01:30/);
+  assert.match(html, /2 first solves/);
+  assert.equal((html.match(/33.3%/g) ?? []).length, 3);
+  assert.match(html, /Average —/);
+});

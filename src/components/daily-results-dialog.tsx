@@ -9,6 +9,9 @@ import { getStapipstics } from "@/lib/pips/stapipstics";
 import { buildDailyShareText, copyDailyResults } from "@/lib/pips/result-sharing";
 import { downloadResultsPng } from "@/lib/pips/result-image";
 
+import { useAllResults } from "@/lib/pips/use-daily-results";
+import { buildPersistentMetrics } from "@/lib/pips/result-metrics";
+
 export function DailyResultsDialog({
   summary,
   raw,
@@ -22,6 +25,11 @@ export function DailyResultsDialog({
   onClose: () => void;
   restoreFocus: () => void;
 }) {
+  const history = useAllResults();
+  const metrics = useMemo(
+    () => buildPersistentMetrics(summary, history.results),
+    [summary, history.results],
+  );
   const facts = useMemo(() => getStapipstics(summary, raw), [summary, raw]);
   const text = summary.complete ? buildDailyShareText(summary) : "";
   const [copied, setCopied] = useState(false);
@@ -87,14 +95,14 @@ export function DailyResultsDialog({
           </div>
         ) : null}
         <div className="results-scroll" ref={visibleCard}>
-          <DailyResultsCard summary={summary} facts={facts} />
+          <DailyResultsCard summary={summary} facts={facts} metrics={metrics} />
         </div>
         <div className="results-actions">
           <div className="results-action-buttons">
             <Button
               variant="secondary"
               onClick={() => void download()}
-              disabled={imageStatus === "busy"}
+              disabled={imageStatus === "busy" || !history.ready}
             >
               <Download size={16} />
               {imageStatus === "busy" ? "Generating…" : "Download PNG"}

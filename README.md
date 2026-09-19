@@ -5,6 +5,7 @@ Built with TanStack Start, prerendered to static HTML, and hosted on GitHub Page
 No backend, no accounts — everything a visitor does lives in their browser's localStorage.
 
 ## Layout
+
 - `src/routes/` – the three pages: `index.tsx` (archive), `play.$date.$level.tsx` (the game),
   `stats.tsx`. `src/routes/__root.tsx` is the shared document shell.
 - `src/components/pips-board.tsx`, `pips-tray.tsx` – the board (SVG) and domino tray.
@@ -36,6 +37,7 @@ No backend, no accounts — everything a visitor does lives in their browser's l
   puzzle data, on pushes to `main`, or manually.
 
 ## Commands
+
     npm run dev                            # http://localhost:8080
     npm run backfill                       # launch date .. today, skipping dates already present
     npm run fetch                          # catch up missing archived dates through today
@@ -46,11 +48,13 @@ No backend, no accounts — everything a visitor does lives in their browser's l
     npm run build                          # prerenders every puzzle to dist/client/
 
 ## Puzzle format notes
+
 Board = union of `regions[].indices`; holes are simply absent. `solution[i]` is the cell pair for
 `dominoes[i]`, first cell gets the first pip. Region types: `sum`, `less`, `greater` (all compare the
 region's **sum** to `target`), `equals`, `unequal`, `empty` (no constraint).
 
 ## The site
+
 - **Archive** (`/`) – month-grouped list of every date with easy/medium/hard chips showing your
   best time.
 - **Play** (`/play/:date/:level`) – tap a tray domino, tap the cell for its first half, tap a
@@ -63,6 +67,7 @@ region's **sum** to `target`), `equals`, `unequal`, `empty` (no constraint).
 - **Stats** (`/stats`) – per-level counts, best/median/mean, recent solves, export/import/erase.
 
 ## Deploy
+
 Every push to `main` runs `.github/workflows/deploy.yml`, which builds the site (prerendering
 every puzzle to a real static HTML file — no server, no adapter needed) and publishes
 `dist/client/` to GitHub Pages via `actions/deploy-pages`.
@@ -105,3 +110,7 @@ These records are browser-local. Clearing site data, deliberate erasure, changin
 ### Browser regression checks
 
 After `npm ci` and `npm run build`, install browsers with `npx playwright install --with-deps chromium firefox webkit`, then run `npm run test:browser`. The suite starts a loopback production preview, checks all three engines, tests real same-origin storage races, and validates downloaded PNG bytes and full dimensions. Screenshots and images are written to `.superpowers/browser-artifacts/` for visual review. Missing browser binaries fail explicitly.
+
+The daily card always shows each difficulty’s share of that day’s total time and its average first-solve time across all saved puzzle dates, with a sample count. Replays and best times do not affect the average. Missing averages and incomplete or zero-total shares show a dash. Saved-result changes refresh these metrics, and PNG exports include the same values.
+
+`evaluateStapipstics` evaluates all 15 registered candidates and returns each result (or null), a bounded score, selected status, and a reason for inclusion or exclusion. Editorial scores use the actual pip proportions, repeated pairs, extremes, rule variety, and rates; they are not population percentiles. The highest-scoring three distinct subjects are shown, with catalog order breaking ties. Hard’s time share is excluded because it is already permanent. Add new candidates together with a score rule and regression coverage.

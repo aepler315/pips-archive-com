@@ -3,7 +3,17 @@ import { LEVELS } from "../lib/pips/engine";
 import { formatResultDate, formatResultDuration, type DayResults } from "../lib/pips/daily-results";
 import type { Stapipstic } from "../lib/pips/stapipstics";
 
-export function DailyResultsCard({ summary, facts }: { summary: DayResults; facts: Stapipstic[] }) {
+import { buildPersistentMetrics, type PersistentMetrics } from "../lib/pips/result-metrics";
+
+export function DailyResultsCard({
+  summary,
+  facts,
+  metrics = buildPersistentMetrics(summary, []),
+}: {
+  summary: DayResults;
+  facts: Stapipstic[];
+  metrics?: PersistentMetrics;
+}) {
   return (
     <article className="daily-results-card" aria-label="Daily puzzle results">
       <header className="results-card-header">
@@ -36,6 +46,23 @@ export function DailyResultsCard({ summary, facts }: { summary: DayResults; fact
             <strong>
               {summary.records[level] ? formatResultDuration(summary.records[level].first) : "—"}
             </strong>
+            <div className="results-score-metrics">
+              <span>
+                {metrics[level].sharePercent === null
+                  ? "—"
+                  : `${metrics[level].sharePercent.toFixed(1)}%`}{" "}
+                of total
+              </span>
+              <span>
+                Average{" "}
+                {metrics[level].averageMs === null
+                  ? "—"
+                  : formatResultDuration(metrics[level].averageMs)}
+              </span>
+              <small>
+                {metrics[level].count} first solve{metrics[level].count === 1 ? "" : "s"}
+              </small>
+            </div>
             {!summary.records[level] ? (
               <span className="results-score-status">Not solved</span>
             ) : null}

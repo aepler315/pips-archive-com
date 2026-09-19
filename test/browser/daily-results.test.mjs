@@ -45,10 +45,14 @@ for (const engine of engines) {
         assert.equal(await page.getByRole("dialog").count(), 0);
         await openResults(page);
         assert.equal(await page.locator(".results-score-easy strong").innerText(), "02:00");
+        assert.match(
+          await page.locator(".results-score-easy .results-score-metrics").innerText(),
+          /24.5% of total\nAverage 02:00\n1 first solve/,
+        );
         await page.keyboard.press("Escape");
         assert.match(await page.locator(":focus").getAttribute("aria-label"), /View results/);
         await page.reload();
-        await page.getByRole("button", { name: /View results for/ }).waitFor();
+        await page.locator(".results-date-trigger").waitFor();
         assert.equal(await page.getByRole("dialog").count(), 0);
         await page.goto(`${base}/stats`);
         await page.getByRole("columnheader", { name: "Recorded time", exact: true }).waitFor();
@@ -279,12 +283,12 @@ for (const engine of engines) {
     await play(b);
     assert.equal(await b.getByRole("dialog").count(), 0);
     await storeCall(a, "eraseAll", []);
-    await b.getByRole("button", { name: /View results for/ }).waitFor({ state: "detached" });
+    await b.locator(".results-date-trigger").waitFor({ state: "detached" });
     const imported = await storeCall(a, "importAll", [
       JSON.stringify({ version: 1, data: { [key("easy")]: record() } }),
     ]);
     assert.equal(imported.imported, 1);
-    await b.getByRole("button", { name: /View results for/ }).waitFor();
+    await b.locator(".results-date-trigger").waitFor();
     assert.equal(await b.getByRole("dialog").count(), 0);
   });
   test(
@@ -399,7 +403,7 @@ for (const engine of engines) {
             { date, solution: fixture.hard.solution },
           );
           await play(hidden, "hard");
-          await hidden.getByRole("button", { name: /View results for/ }).waitFor();
+          await hidden.locator(".results-date-trigger").waitFor();
           await hidden.waitForTimeout(550);
           assert.equal(await hidden.getByRole("dialog").count(), 0);
           await hidden.clock.setFixedTime(new Date("2026-09-20T00:01:00Z"));
@@ -435,7 +439,7 @@ for (const engine of engines) {
       });
       await solveOnReload(hidden, "hard");
       await storeCall(other, "eraseAll", []);
-      await hidden.getByRole("button", { name: /View results for/ }).waitFor({ state: "detached" });
+      await hidden.locator(".results-date-trigger").waitFor({ state: "detached" });
       await hidden.evaluate(() => {
         window.testHidden = false;
         document.dispatchEvent(new Event("visibilitychange"));
@@ -449,7 +453,7 @@ for (const engine of engines) {
           data: { [key("easy")]: record(), [key("medium")]: record(), [key("hard")]: record() },
         }),
       ]);
-      await hidden.getByRole("button", { name: /View results for/ }).waitFor();
+      await hidden.locator(".results-date-trigger").waitFor();
       await hidden.waitForTimeout(600);
       assert.equal(await hidden.getByRole("dialog").count(), 0);
     },
