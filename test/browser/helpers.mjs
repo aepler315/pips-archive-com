@@ -110,7 +110,7 @@ export async function play(page, level = "easy", day = date) {
   await page.waitForFunction(() => document.querySelector(".board-svg"));
 }
 export async function openResults(page) {
-  await page.getByRole("button", { name: /View results for/ }).click();
+  await page.locator(".results-date-trigger").click();
   await page.getByRole("dialog").waitFor();
 }
 export async function solveOnReload(page, level, day = date) {
@@ -130,7 +130,7 @@ export async function solveOnReload(page, level, day = date) {
     { level, day, solution: raw[level].solution },
   );
   await play(page, level, day);
-  await page.getByRole("button", { name: /View results for/ }).waitFor();
+  await page.locator(".results-date-trigger").waitFor();
 }
 export async function storeCall(page, method, args) {
   return page.evaluate(

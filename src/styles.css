@@ -388,3 +388,15 @@
     animation: none;
   }
 }
+
+.results-score-metrics {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted-foreground);
+}
+.results-score-metrics small {
+  font-size: 10px;
+}
