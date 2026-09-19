@@ -1,4 +1,5 @@
-import { adjacent, key, type GameState, type Level, type Puzzle } from "./engine";
+import { formatResultDuration } from "./daily-results";
+import { LEVELS, adjacent, key, type GameState, type Level, type Puzzle } from "./engine";
 
 const P = "pips-archive:v1:";
 
@@ -77,15 +78,94 @@ export function clearProgress(date: string, level: Level) {
   remove(progressKey(date, level));
 }
 
-export function recordSolve(date: string, level: Level, ms: number): Result & { saved: boolean } {
-  const prev = getResult(date, level);
+export type SolveWrite =
+  | { status: "created" | "existing"; result: Result; completedDay: boolean; reason?: never }
+  | {
+      status: "failed";
+      result: null;
+      completedDay: false;
+      reason: "storage" | "invalid" | "corrupt" | "locking";
+    };
+
+const listeners = new Set<() => void>();
+function notifyResults() {
+  for (const listener of listeners) {
+    // A UI subscriber must never turn a committed save into a failed outcome.
+    try {
+      listener();
+    } catch {
+      /* independently owned listener */
+    }
+  }
+}
+export function subscribeResults(listener: () => void): () => void {
+  listeners.add(listener);
+  const changed = (event: StorageEvent) => {
+    if (event.key === null || event.key.startsWith(`${P}result:`)) listener();
+  };
+  if (typeof window !== "undefined") window.addEventListener?.("storage", changed);
+  return () => {
+    listeners.delete(listener);
+    if (typeof window !== "undefined") window.removeEventListener?.("storage", changed);
+  };
+}
+
+async function withResultLock<T>(run: () => T): Promise<T> {
+  if (typeof navigator === "undefined" || !navigator.locks?.request)
+    throw new Error("Safe result saving requires Web Locks");
+  return navigator.locks.request("pips-archive:results", run);
+}
+
+// Unlike display reads, mutation reads must distinguish missing from corrupt/blocked.
+function inspectResult(
+  k: string,
+): { kind: "missing" } | { kind: "existing"; result: Result } | { kind: "storage" | "corrupt" } {
+  const s = storage();
+  if (!s) return { kind: "storage" };
+  try {
+    const raw = s.getItem(k);
+    if (raw === null) return { kind: "missing" };
+    try {
+      const result = normalizeResult(JSON.parse(raw));
+      return result ? { kind: "existing", result } : { kind: "corrupt" };
+    } catch {
+      return { kind: "corrupt" };
+    }
+  } catch {
+    return { kind: "storage" };
+  }
+}
+
+export async function recordSolve(date: string, level: Level, ms: number): Promise<SolveWrite> {
+  const failed = (reason: "storage" | "invalid" | "corrupt" | "locking"): SolveWrite => ({
+    status: "failed",
+    result: null,
+    completedDay: false,
+    reason,
+  });
+  if (!parseKey(resultKey(date, level)) || !duration(ms)) return failed("invalid");
+  // Freeze the completion timestamp before waiting for another tab's write.
   const now = new Date().toISOString();
-  const next: Result = prev
-    ? { ...prev, best: Math.min(prev.best, ms), plays: prev.plays + 1, lastAt: now }
-    : { first: ms, best: ms, solvedAt: now, lastAt: now, plays: 1 };
-  const saved = write(resultKey(date, level), next);
-  if (saved) clearProgress(date, level);
-  return { ...next, saved };
+  try {
+    return await withResultLock(() => {
+      const prev = inspectResult(resultKey(date, level));
+      if (prev.kind === "storage" || prev.kind === "corrupt") return failed(prev.kind);
+      if (prev.kind === "existing") {
+        clearProgress(date, level);
+        return { status: "existing", result: prev.result, completedDay: false };
+      }
+      const completedDay = LEVELS.filter((l) => l !== level).every(
+        (l) => inspectResult(resultKey(date, l)).kind === "existing",
+      );
+      const result: Result = { first: ms, best: ms, solvedAt: now, lastAt: now, plays: 1 };
+      if (!write(resultKey(date, level), result)) return failed("storage");
+      clearProgress(date, level);
+      notifyResults();
+      return { status: "created", result, completedDay };
+    });
+  } catch {
+    return failed("locking");
+  }
 }
 
 export function allResults(): (Result & { date: string; level: Level })[] {
@@ -190,79 +270,92 @@ function isValidProgress(v: unknown): v is Progress {
   });
 }
 
-export function importAll(text: string): {
+export type ImportReport = {
   imported: number;
   progress: number;
+  unchanged: number;
   skipped: number;
   failed: number;
-} {
+};
+export async function importAll(text: string): Promise<ImportReport> {
   const obj = JSON.parse(text) as { version?: number; data?: Record<string, unknown> };
   if (obj?.version !== 1 || !obj.data || typeof obj.data !== "object" || Array.isArray(obj.data))
     throw new Error("Not a Pips Archive export");
-  let imported = 0,
-    progress = 0,
-    skipped = 0,
-    failed = 0;
-  for (const [k, v] of Object.entries(obj.data)) {
-    const parsed = parseKey(k);
-    if (!parsed) {
-      skipped++;
-      continue;
-    }
-    if (parsed.kind === "progress") {
-      if (!isValidProgress(v)) {
-        skipped++;
+  const entries = Object.entries(obj.data);
+  return withResultLock(() => {
+    const report: ImportReport = { imported: 0, progress: 0, unchanged: 0, skipped: 0, failed: 0 };
+    for (const [k, v] of entries) {
+      const parsed = parseKey(k);
+      if (!parsed) {
+        report.skipped++;
         continue;
       }
-      const value: Progress = {
-        elapsed: v.elapsed,
-        state: v.state.map((p) => (p ? { cells: p.cells } : null)),
-      };
-      if (write(k, value)) progress++;
-      else failed++;
-      continue;
-    }
-    const result = normalizeResult(v);
-    if (!result) {
-      skipped++;
-      continue;
-    }
-    const cur = normalizeResult(read(k));
-    const merged = cur
-      ? {
-          first: cur.solvedAt <= result.solvedAt ? cur.first : result.first,
-          best: Math.min(cur.best, result.best),
-          solvedAt: cur.solvedAt < result.solvedAt ? cur.solvedAt : result.solvedAt,
-          lastAt: cur.lastAt > result.lastAt ? cur.lastAt : result.lastAt,
-          plays: Math.max(cur.plays, result.plays),
+      if (parsed.kind === "progress") {
+        if (!isValidProgress(v)) {
+          report.skipped++;
+          continue;
         }
-      : result;
-    if (write(k, merged)) imported++;
-    else failed++;
-  }
-  return { imported, progress, skipped, failed };
+        const value: Progress = {
+          elapsed: v.elapsed,
+          state: v.state.map((p) => (p ? { cells: p.cells } : null)),
+        };
+        if (write(k, value)) report.progress++;
+        else report.failed++;
+        continue;
+      }
+      const result = normalizeResult(v);
+      if (!result) {
+        report.skipped++;
+        continue;
+      }
+      const cur = inspectResult(k);
+      if (cur.kind === "existing") {
+        report.unchanged++;
+        continue;
+      }
+      if (cur.kind !== "missing") {
+        report.failed++;
+        continue;
+      }
+      if (write(k, result)) report.imported++;
+      else report.failed++;
+    }
+    if (report.imported) notifyResults();
+    return report;
+  });
 }
 
-export function eraseAll() {
-  const s = storage();
-  if (!s) return;
-  const keys: string[] = [];
-  for (let i = 0; i < s.length; i++) {
-    const k = s.key(i);
-    if (k?.startsWith(P)) keys.push(k);
+export async function eraseAll(): Promise<{ erased: number; failed: number }> {
+  try {
+    return await withResultLock(() => {
+      const s = storage();
+      if (!s) return { erased: 0, failed: 1 };
+      let erased = 0,
+        failed = 0;
+      try {
+        const keys = Array.from({ length: s.length }, (_, i) => s.key(i));
+        for (const k of keys) {
+          if (!k?.startsWith(P)) continue;
+          try {
+            s.removeItem(k);
+            erased++;
+          } catch {
+            failed++;
+          }
+        }
+      } catch {
+        failed++;
+      }
+      if (erased) notifyResults();
+      return { erased, failed };
+    });
+  } catch {
+    return { erased: 0, failed: 1 };
   }
-  keys.forEach(remove);
 }
 
 export function clockMs(accumulated: number, tickStart: number | null, now: number): number {
   return Math.round(accumulated + (tickStart == null ? 0 : now - tickStart));
 }
 
-export function fmt(ms: number) {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  const m = Math.floor(s / 60);
-  const h = Math.floor(m / 60);
-  const mm = String(m % 60).padStart(h ? 2 : 1, "0");
-  const ss = String(s % 60).padStart(2, "0");
-  return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
-}
+export const fmt = formatResultDuration;

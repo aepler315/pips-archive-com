@@ -9,8 +9,9 @@ export const DialogTrigger = DialogPrimitive.Trigger;
 export function DialogContent({
   className,
   children,
+  closeClassName,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content>) {
+}: React.ComponentProps<typeof DialogPrimitive.Content> & { closeClassName?: string }) {
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-foreground/30" />
@@ -22,7 +23,12 @@ export function DialogContent({
         {...props}
       >
         {children}
-        <DialogPrimitive.Close className="absolute top-3 right-3 rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground">
+        <DialogPrimitive.Close
+          className={cn(
+            "absolute top-3 right-3 rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground",
+            closeClassName,
+          )}
+        >
           <X className="size-4" />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>
@@ -31,7 +37,10 @@ export function DialogContent({
   );
 }
 
-export function DialogTitle({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Title>) {
+export function DialogTitle({
+  className,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Title>) {
   return (
     <DialogPrimitive.Title
       className={cn("font-display pr-6 text-lg font-semibold text-foreground", className)}
@@ -44,5 +53,10 @@ export function DialogDescription({
   className,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Description>) {
-  return <DialogPrimitive.Description className={cn("mt-1 text-sm text-muted-foreground", className)} {...props} />;
+  return (
+    <DialogPrimitive.Description
+      className={cn("mt-1 text-sm text-muted-foreground", className)}
+      {...props}
+    />
+  );
 }

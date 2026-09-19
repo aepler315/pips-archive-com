@@ -1,4 +1,14 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useDailyResults } from "@/lib/pips/use-daily-results";
+import { DailyResultsDialog } from "@/components/daily-results-dialog";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 // useLayoutEffect warns when it runs during SSR; fall back to useEffect
 // there (its client-only work never executes during a prerender pass).
@@ -201,6 +211,7 @@ function BoardControls({
   onReset,
   disabled,
   compact,
+  resetDisabled,
 }: {
   placed: number;
   total: number;
@@ -209,6 +220,7 @@ function BoardControls({
   onReset: () => void;
   disabled?: boolean;
   compact?: boolean;
+  resetDisabled?: boolean;
 }) {
   return (
     <div className={cn(compact ? "mt-1" : "mt-4", "flex items-center justify-between")}>
@@ -221,7 +233,7 @@ function BoardControls({
         </Button>
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" disabled={resetDisabled}>
               Clear board
             </Button>
           </AlertDialogTrigger>
@@ -327,7 +339,22 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const [anchor, setAnchor] = useState<Anchor | null>(null);
   const [solveMs, setSolveMs] = useState<number | null>(null);
   const [solveDetail, setSolveDetail] = useState("");
-  const [justCopied, setJustCopied] = useState(false);
+  const { summary } = useDailyResults(date);
+  const [dialogReason, setDialogReason] = useState<"automatic" | "manual" | null>(null);
+  const dialogRef = useRef(false);
+  const [autoPending, setAutoPending] = useState(false);
+  const [saveBusy, setSaveBusy] = useState(false);
+  const writeBusy = useRef(false);
+  const alive = useRef(true);
+  const attempt = useRef<{ ms: number; generation: number } | null>(null);
+  const generation = useRef(0);
+  const dateButtonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   const [clock] = useState(createClock);
   const [saveFailed, setSaveFailed] = useState(false);
   const solvedRef = useRef(false);
@@ -340,11 +367,6 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const historyRef = useRef<GameState[]>([]);
   const touchedRef = useRef(false);
   const [canUndo, setCanUndo] = useState(false);
-  // Any localStorage read used in render (not just to seed initial state)
-  // must wait for this, or it renders differently than the server did for
-  // every returning player and crashes hydration for the whole page.
-  const [hydrated, setHydrated] = useState(false);
-  useEffect(() => setHydrated(true), []);
   const puzzleRef = useRef(puzzle);
   puzzleRef.current = puzzle;
   const [fresh, setFresh] = useState<number | null>(null);
@@ -372,7 +394,8 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const nowElapsed = () => clock.read(performance.now());
 
   const startClock = () => {
-    if (!document.hidden && !solvedRef.current) clock.start(performance.now());
+    if (!document.hidden && !solvedRef.current && !dialogRef.current)
+      clock.start(performance.now());
   };
   const stopClock = () => clock.stop(performance.now());
 
@@ -417,6 +440,8 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (dialogRef.current || document.querySelector('[role="dialog"], [role="alertdialog"]'))
+        return;
       if (e.code === "Tab") {
         // A focused board cell is a real keyboard control. Let Tab move out
         // of it to the selected-domino controls instead of stealing the key
@@ -490,6 +515,28 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
 
   const solvedBannerRef = useRef<HTMLDivElement>(null);
 
+  const saveAttempt = useCallback(async () => {
+    const frozen = attempt.current;
+    if (!frozen || writeBusy.current) return;
+    writeBusy.current = true;
+    setSaveBusy(true);
+    const res = await recordSolve(date, level, frozen.ms);
+    writeBusy.current = false;
+    if (!alive.current || frozen.generation !== generation.current) return;
+    setSaveBusy(false);
+    setSaveFailed(res.status === "failed");
+    setSolveDetail(
+      res.status === "failed"
+        ? res.reason === "locking"
+          ? "Safe saving is unavailable in this browser. Keep this tab open and retry."
+          : "This time has not been saved. Keep this tab open and retry."
+        : res.status === "existing"
+          ? `Practice attempt. Recorded time: ${fmt(res.result.first)}. Replays do not change it.`
+          : "First solve recorded.",
+    );
+    if (res.status === "created" && res.completedDay) setAutoPending(true);
+  }, [date, level]);
+
   useEffect(() => {
     if (ev.solved && !solvedRef.current) {
       const now = performance.now();
@@ -499,37 +546,55 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
       setSolvedFlag(true);
       holdSel(null);
       holdAnchor(null);
-      const res = recordSolve(date, level, ms);
-      setSaveFailed(!res.saved);
+      attempt.current = { ms, generation: generation.current };
       setSolveMs(ms);
-      setSolveDetail(
-        res.plays > 1 ? `Best ${fmt(res.best)} over ${res.plays} plays.` : "First solve.",
-      );
+      setSolveDetail("Saving recorded time…");
+      void saveAttempt();
     }
-  }, [ev.solved, date, level, clock]);
+  }, [ev.solved, clock, saveAttempt]);
+
+  const openResults = useCallback(
+    (reason: "automatic" | "manual") => {
+      if (reason === "manual") setAutoPending(false);
+      dialogRef.current = true;
+      clock.stop(performance.now());
+      setDialogReason(reason);
+    },
+    [clock],
+  );
 
   useEffect(() => {
-    if (solveMs === null) return;
-    // The click that placed the final domino still has pending default
-    // focus handling (a click landing on the non-focusable SVG board resets
-    // focus to <body>) that can run after this effect and win the race,
-    // undoing a single focus() call regardless of how it's deferred. Keep
-    // reasserting for a few frames — cheap, and it stops as soon as it holds.
-    let frames = 0;
-    let raf = 0;
-    // Something un-focuses the banner asynchronously, and not always on the
-    // very next frame — so keep re-asserting for a short window instead of
-    // stopping the first time a check happens to catch it still focused.
-    const tick = () => {
-      const el = solvedBannerRef.current;
-      if (!el) return;
-      if (document.activeElement !== el) el.focus();
-      frames++;
-      if (frames < 20) raf = requestAnimationFrame(tick);
+    if (!autoPending) return;
+    if (!summary?.complete) {
+      setAutoPending(false);
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      clearTimeout(timer);
+      if (!document.hidden)
+        timer = setTimeout(() => {
+          setAutoPending(false);
+          // A cross-tab erase can precede its storage event. Re-read at presentation.
+          if (LEVELS.every((l) => getResult(date, l) !== null)) openResults("automatic");
+        }, 450);
     };
-    tick();
+    schedule();
+    document.addEventListener("visibilitychange", schedule);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", schedule);
+    };
+  }, [autoPending, openResults, summary?.complete, date]);
+
+  useEffect(() => {
+    if (solveMs === null || dialogReason || autoPending) return;
+    const raf = requestAnimationFrame(() => {
+      if (!document.querySelector('[role="dialog"], [role="alertdialog"]'))
+        solvedBannerRef.current?.focus();
+    });
     return () => cancelAnimationFrame(raf);
-  }, [solveMs]);
+  }, [solveMs, dialogReason, autoPending]);
 
   const HISTORY_MAX = 50;
 
@@ -543,7 +608,8 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     startClock();
     stateRef.current = next;
     setState(next);
-    if (!solvedRef.current) setSaveFailed(!saveProgress(date, level, next, nowElapsed()));
+    if (!solvedRef.current && !evaluate(puzzleRef.current, next).solved)
+      setSaveFailed(!saveProgress(date, level, next, nowElapsed()));
   }
 
   function undo() {
@@ -730,6 +796,11 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   }
 
   function doReset() {
+    if (writeBusy.current || (attempt.current && saveFailed)) return;
+    generation.current++;
+    attempt.current = null;
+    setAutoPending(false);
+    setSaveFailed(false);
     stopClock();
     solvedRef.current = false;
     const empty = emptyState(puzzle);
@@ -744,21 +815,6 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     historyRef.current = [];
     setCanUndo(false);
     startClock();
-  }
-
-  async function share() {
-    const url = `${location.origin}/play/${date}/${level}`;
-    const scoreLine = `Pips ${date} ${level}: ${fmt(solveMs ?? nowElapsed())}`;
-    try {
-      if (navigator.share) await navigator.share({ text: scoreLine, url });
-      else {
-        await navigator.clipboard.writeText(`${scoreLine}\n${url}`);
-        setJustCopied(true);
-        setTimeout(() => setJustCopied(false), 1500);
-      }
-    } catch {
-      /* cancelled */
-    }
   }
 
   const verb = mousey ? "Click" : "Tap";
@@ -778,7 +834,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
             ? "Click a domino, or a placed one to move it."
             : "Tap a domino, or a placed one to move it.";
 
-  const prior = hydrated ? getResult(date, level) : null;
+  const prior = summary?.records[level] ?? null;
   const nextTarget = useMemo(
     () => nextPuzzleTarget(archive.puzzles, date, level),
     [archive, date, level],
@@ -811,7 +867,22 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
 
   return (
     <Shell wide={sideTray}>
-      <h1 className="font-display mt-7 text-[1.45rem] font-semibold tracking-tight">{dateLabel}</h1>
+      <h1 className="font-display mt-7 text-[1.45rem] font-semibold tracking-tight">
+        {prior ? (
+          <button
+            ref={dateButtonRef}
+            type="button"
+            className="results-date-trigger"
+            aria-label={`View results for ${dateLabel}`}
+            onClick={() => openResults("manual")}
+          >
+            {dateLabel}
+            <span aria-hidden="true"> ↗</span>
+          </button>
+        ) : (
+          dateLabel
+        )}
+      </h1>
       <p className="mt-1 text-muted-foreground">
         {level[0].toUpperCase() + level.slice(1)} · by {raw[level].constructors ?? "unknown"}
       </p>
@@ -832,7 +903,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
       <div className="mt-4 mb-3 flex flex-wrap items-center justify-between gap-3">
         <div className="inline-flex rounded-full bg-muted p-0.5">
           {LEVELS.map((l) => {
-            const done = hydrated && !!getResult(date, l);
+            const done = !!summary?.records[l];
             return (
               <Link
                 key={l}
@@ -849,10 +920,10 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
             );
           })}
         </div>
-        <PlayClock clock={clock} stopped={solvedFlag} />
+        <PlayClock clock={clock} stopped={solvedFlag || dialogReason !== null} />
       </div>
 
-      {saveFailed ? (
+      {saveFailed && solveMs === null ? (
         <p role="alert" className="mb-3 text-sm text-bad-ink">
           Your latest progress could not be saved. Browser storage may be full or unavailable. Keep
           this tab open and export your saved data before clearing any storage.
@@ -868,13 +939,25 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
           className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] bg-ok px-4 py-3 text-ok-ink focus:outline-none"
         >
           <div>
-            Solved in <strong className="text-xl tabular-nums">{fmt(solveMs)}</strong>{" "}
+            {saveFailed ? "Attempt time" : "Solved in"}{" "}
+            <strong className="text-xl tabular-nums">{fmt(solveMs)}</strong>{" "}
             <span>{solveDetail}</span>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={share}>
-              {justCopied ? "Copied" : "Share"}
-            </Button>
+            {saveFailed ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={saveBusy}
+                onClick={() => void saveAttempt()}
+              >
+                {saveBusy ? "Saving…" : "Retry save"}
+              </Button>
+            ) : prior ? (
+              <Button variant="secondary" size="sm" onClick={() => openResults("manual")}>
+                View results
+              </Button>
+            ) : null}
             {nextTarget ? (
               <Link
                 to="/play/$date/$level"
@@ -886,9 +969,9 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
             ) : null}
           </div>
         </div>
-      ) : prior && !getProgress(date, level) && !state.some(Boolean) ? (
+      ) : prior ? (
         <p className="mb-2 text-sm text-muted-foreground">
-          You solved this in {fmt(prior.first)}. Playing again keeps your best.
+          Recorded time: {fmt(prior.first)}. Replays do not change it.
         </p>
       ) : null}
 
@@ -980,11 +1063,25 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
               onReset={doReset}
               disabled={solvedFlag}
               compact={!sideTray && !isMd}
+              resetDisabled={saveBusy || (solveMs !== null && saveFailed)}
             />
           </div>
         </div>
       </div>
 
+      {summary && dialogReason ? (
+        <DailyResultsDialog
+          summary={summary}
+          raw={raw}
+          reason={dialogReason}
+          onClose={() => {
+            dialogRef.current = false;
+            setDialogReason(null);
+            startClock();
+          }}
+          restoreFocus={() => (dateButtonRef.current ?? solvedBannerRef.current)?.focus()}
+        />
+      ) : null}
       {!sideTray && !isMd ? (
         <div className={sel?.kind === "board" ? "h-[10.5rem]" : "h-[7.75rem]"} aria-hidden="true" />
       ) : null}

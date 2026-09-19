@@ -6,3 +6,6 @@ node_modules/
 dist
 *.local
 public/data/
+
+# Local review evidence
+.superpowers/

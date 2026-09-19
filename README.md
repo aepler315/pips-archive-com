@@ -76,3 +76,30 @@ fetch leaves both index timestamps intact and skips deployment. Failed requests,
 backfills, leave the workflow red, while successfully validated additions are committed and deployed. Schedules are best-effort: GitHub can delay runs, so exact midnight
 publication is not guaranteed. The default fetch fills gaps between the first archived date and
 today; `--all` also fills any dates missing before the first archived file.
+
+### Recorded times and daily results
+
+Your first successfully saved completion time for each date and difficulty is permanent in this browser. Faster and slower replays are practice; clearing the board does not remove the recorded time. Archive and statistics screens use that first time, including older backups that also contain a faster `best` value.
+
+Completing a date’s third puzzle opens its daily results card once. Click the date heading on a puzzle you have already completed to reopen it, including archived dates. A partially completed day shows saved times and “Not solved” for the rest; PNG download works, and Share becomes available after all three are recorded.
+
+Stapipstics combine your recorded times with the actual dominoes in those three puzzles. Their selection is deterministic. They do not measure moves, mistakes, thinking speed, or performance against other players.
+
+Download PNG exports the full card at 2× resolution, without the controls or surrounding board. Share copies exactly:
+
+```text
+Pips 09/19/2026
+Easy: 01:02
+Medium: 02:05
+Hard: 04:05
+```
+
+Minutes do not wrap at an hour. If clipboard access is blocked, the same text appears for manual copying. If a completion cannot be safely saved, its attempt time stays frozen and Retry save uses that time. Keep that tab open until saving succeeds.
+
+Result writes, imports, and confirmed erasure use the browser’s Web Locks API. Saving requires a secure context (HTTPS or localhost) and Web Locks support; an unavailable lock does not trigger an unsafe fallback. Existing records remain readable. Imported backups fill missing results and keep existing local results unchanged, even when the backup is faster or older. Reload older open tabs before importing after this upgrade so they use the same rules. Corrupt stored entries are preserved and reported as save failures.
+
+These records are browser-local. Clearing site data, deliberate erasure, changing browsers without importing a backup, or manually editing storage can remove them. Export backups before erasing data.
+
+### Browser regression checks
+
+After `npm ci` and `npm run build`, install browsers with `npx playwright install --with-deps chromium firefox webkit`, then run `npm run test:browser`. The suite starts a loopback production preview, checks all three engines, tests real same-origin storage races, and validates downloaded PNG bytes and full dimensions. Screenshots and images are written to `.superpowers/browser-artifacts/` for visual review. Missing browser binaries fail explicitly.
