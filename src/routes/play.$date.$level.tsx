@@ -349,6 +349,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const attempt = useRef<{ ms: number; generation: number } | null>(null);
   const generation = useRef(0);
   const dateButtonRef = useRef<HTMLButtonElement>(null);
+  const resultsFocusRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     alive.current = true;
     return () => {
@@ -514,6 +515,17 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   }, [date, level, puzzle, clock]);
 
   const solvedBannerRef = useRef<HTMLDivElement>(null);
+  const restoreResultsFocus = useCallback(() => {
+    const target =
+      (resultsFocusRef.current?.isConnected ? resultsFocusRef.current : null) ??
+      dateButtonRef.current ??
+      solvedBannerRef.current;
+    if (!target) return;
+    target.focus();
+    requestAnimationFrame(() => {
+      if (document.activeElement === document.body) target.focus();
+    });
+  }, []);
 
   const saveAttempt = useCallback(async () => {
     const frozen = attempt.current;
@@ -555,7 +567,11 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
 
   const openResults = useCallback(
     (reason: "automatic" | "manual") => {
-      if (reason === "manual") setAutoPending(false);
+      if (reason === "manual") {
+        setAutoPending(false);
+        const active = document.activeElement;
+        resultsFocusRef.current = active instanceof HTMLElement ? active : null;
+      }
       dialogRef.current = true;
       clock.stop(performance.now());
       setDialogReason(reason);
@@ -954,7 +970,12 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
                 {saveBusy ? "Saving…" : "Retry save"}
               </Button>
             ) : prior ? (
-              <Button variant="secondary" size="sm" onClick={() => openResults("manual")}>
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-label={`View results for ${dateLabel}`}
+                onClick={() => openResults("manual")}
+              >
                 View results
               </Button>
             ) : null}
@@ -1078,8 +1099,9 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
             dialogRef.current = false;
             setDialogReason(null);
             startClock();
+            requestAnimationFrame(restoreResultsFocus);
           }}
-          restoreFocus={() => (dateButtonRef.current ?? solvedBannerRef.current)?.focus()}
+          restoreFocus={restoreResultsFocus}
         />
       ) : null}
       {!sideTray && !isMd ? (
