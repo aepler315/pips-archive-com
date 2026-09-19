@@ -141,17 +141,6 @@
   width: 100%;
   box-sizing: border-box;
 }
-.results-eyebrow {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  color: #696252;
-  padding-right: 22px;
-}
 .results-pip-mark {
   display: flex;
   align-items: center;
@@ -160,12 +149,6 @@
   border: 1px solid #92856f;
   border-radius: 4px;
   padding: 5px 4px;
-}
-.results-pip-mark i {
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: #696252;
 }
 .results-card-header {
   text-align: center;
@@ -253,9 +236,6 @@
   display: flex;
   justify-content: space-between;
 }
-.results-facts h3 span {
-  color: #6e8860;
-}
 .results-facts-intro {
   color: #78716c;
   font-size: 0.75rem;
@@ -293,9 +273,6 @@
   color: #696252;
   font-size: 0.65rem;
   font-weight: 600;
-}
-.results-card-brand span {
-  font-weight: 400;
 }
 .results-actions {
   flex-shrink: 0;

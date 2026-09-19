@@ -85,7 +85,7 @@ Your first successfully saved completion time for each date and difficulty is pe
 
 Completing a date’s third puzzle opens its daily results card once. Click the date heading on a puzzle you have already completed to reopen it, including archived dates. A partially completed day shows saved times and “Not solved” for the rest; PNG download works, and Share becomes available after all three are recorded.
 
-Stapipstics combine your recorded times with the actual dominoes in those three puzzles. Their selection is deterministic. They do not measure moves, mistakes, thinking speed, or performance against other players.
+Stapipstics combine your recorded times with the actual dominoes in those three puzzles. The pool includes pip frequency, missing pip values, odd/even balance, repeated domino pairs, consecutive halves, the heaviest dominoes, region-rule mix, unrestricted cells, and solve-time rates. Each card picks up to three distinct subjects deterministically, so similar facts do not crowd each other out. They do not measure moves, mistakes, thinking speed, or performance against other players.
 
 Download PNG exports the full card at 2× resolution, without the controls or surrounding board. Share copies exactly:
 

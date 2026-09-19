@@ -1,26 +1,29 @@
 import { LEVELS, type RawDay } from "./engine";
-import { buildDailyResults, formatResultDuration, type DayResults } from "./daily-results";
+import { buildDailyResults, type DayResults } from "./daily-results";
 
 export type Stapipstic = {
   id: string;
   family: "timing" | "composition" | "curiosity";
+  group: "halves" | "pairs" | "rules" | "timing" | "rate";
   label: string;
   value: string;
   explanation: string;
 };
 const decimal = (n: number) => (Object.is(n, -0) ? 0 : n).toFixed(1);
-const title = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 export function getStapipsticCandidates(input: DayResults, raw: RawDay): Stapipstic[] {
   const summary = buildDailyResults(input.date, input.records);
   const facts: Stapipstic[] = [];
   const add = (
     id: string,
-    family: Stapipstic["family"],
+    group: Stapipstic["group"],
     label: string,
     value: string,
-    explanation: string,
-  ) => facts.push({ id, family, label, value, explanation });
+    explanation = "",
+  ) => {
+    const family = group === "timing" ? "timing" : group === "rate" ? "curiosity" : "composition";
+    facts.push({ id, group, family, label, value, explanation });
+  };
   const dominoes = LEVELS.flatMap((l) => raw[l].dominoes);
   const validPips =
     raw.printDate === summary.date &&
@@ -32,19 +35,19 @@ export function getStapipsticCandidates(input: DayResults, raw: RawDay): Stapips
   if (validPips) {
     add(
       "payload",
-      "composition",
+      "halves",
       "Pip payload",
       `${payload} pips`,
-      "Every pip on every domino across the three puzzles.",
+      "Every pip across all three puzzles.",
     );
     if (dominoes.length) {
       const doubles = dominoes.filter(([a, b]) => a === b).length;
       add(
         "doubles",
-        "composition",
+        "pairs",
         "Double trouble",
         `${doubles} of ${dominoes.length} · ${decimal((doubles / dominoes.length) * 100)}%`,
-        "Dominoes with matching halves, including blank doubles.",
+        "Dominoes with matching halves.",
       );
       for (const [pip, id, label] of [
         [0, "zeros", "Nothing to see here"],
@@ -53,7 +56,7 @@ export function getStapipsticCandidates(input: DayResults, raw: RawDay): Stapips
         const count = halves.filter((n) => n === pip).length;
         add(
           id,
-          "composition",
+          "halves",
           label,
           `${count} of ${halves.length} · ${decimal((count / halves.length) * 100)}%`,
           pip === 0
@@ -61,79 +64,142 @@ export function getStapipsticCandidates(input: DayResults, raw: RawDay): Stapips
             : "Halves showing six across all three puzzles.",
         );
       }
-    }
-  }
-  if (summary.complete && summary.totalMs !== null) {
-    const total = summary.totalMs;
-    const easy = summary.records.easy!.first,
-      hard = summary.records.hard!.first;
-    if (total > 0) {
+      const counts = Array.from({ length: 7 }, (_, pip) => halves.filter((n) => n === pip).length);
+      const most = Math.max(...counts);
+      const common = counts.flatMap((n, pip) => (n === most ? [pip] : []));
       add(
-        "hard",
-        "timing",
-        "The Hard tax",
-        `${decimal((hard / total) * 100)}%`,
-        "Hard’s share of your total recorded solving time.",
+        "common",
+        "halves",
+        common.length === 1 ? "Main character" : "Sharing the spotlight",
+        common.join(" & "),
+        common.length === 1
+          ? `${most} of ${halves.length} halves · ${decimal((most / halves.length) * 100)}% of the set.`
+          : `Each appears on ${most} of ${halves.length} halves.`,
       );
-      const throughput = payload / (total / 60000);
-      if (validPips && Number.isFinite(throughput))
+      const missing = counts.flatMap((n, pip) => (n === 0 ? [pip] : []));
+      if (missing.length)
         add(
-          "throughput",
-          "curiosity",
-          "Pip throughput",
-          `${decimal(throughput)} pips/min`,
-          "Total pips divided by recorded solve minutes; an average, not measured interaction speed.",
+          "missing",
+          "halves",
+          "Missing in action",
+          missing.join(", "),
+          "Pip values that never appear today.",
+        );
+      const odd = halves.filter((n) => n % 2 === 1).length;
+      add(
+        "parity",
+        "halves",
+        "Odd company",
+        `${odd} odd · ${halves.length - odd} even`,
+        "Pip values across all halves; blanks count as even.",
+      );
+      const pairs = new Set(dominoes.map(([a, b]) => `${Math.min(a, b)}-${Math.max(a, b)}`));
+      const repeats = dominoes.length - pairs.size;
+      if (repeats)
+        add(
+          "repeats",
+          "pairs",
+          "Domino déjà vu",
+          `${repeats} repeat${repeats === 1 ? "" : "s"}`,
+          `${dominoes.length} dominoes, ${pairs.size} distinct pip pairs.`,
+        );
+      const neighbors = dominoes.filter(([a, b]) => Math.abs(a - b) === 1).length;
+      if (neighbors)
+        add(
+          "neighbors",
+          "pairs",
+          "Next-door neighbors",
+          `${neighbors} of ${dominoes.length} dominoes`,
+          "Their two halves differ by exactly one pip.",
+        );
+      const maxLoad = Math.max(...dominoes.map(([a, b]) => a + b));
+      const heavy = dominoes.filter(([a, b]) => a + b === maxLoad).length;
+      add(
+        "heavy",
+        "pairs",
+        "Heavy hitters",
+        `${maxLoad} pips`,
+        `${heavy} domino${heavy === 1 ? " has" : "es share"} the largest pip total.`,
+      );
+    }
+    const regions = LEVELS.flatMap((l) => raw[l].regions);
+    const rules = [
+      ["sum", "sum"],
+      ["equals", "equal"],
+      ["unequal", "different"],
+      ["less", "less-than"],
+      ["greater", "greater-than"],
+    ] as const;
+    const known = new Set<string>(["empty", ...rules.map(([type]) => type)]);
+    if (regions.every((r) => known.has(r.type))) {
+      const mix = rules
+        .map(([type, label]) => ({ label, count: regions.filter((r) => r.type === type).length }))
+        .filter((r) => r.count > 0);
+      if (mix.length)
+        add(
+          "rules",
+          "rules",
+          "House rules",
+          `${mix.length} rule type${mix.length === 1 ? "" : "s"}`,
+          mix.map((r) => `${r.count} ${r.label}`).join(" · ") + ".",
+        );
+      const cells = regions.reduce((n, r) => n + r.indices.length, 0);
+      const free = regions
+        .filter((r) => r.type === "empty")
+        .reduce((n, r) => n + r.indices.length, 0);
+      if (cells && free)
+        add(
+          "free",
+          "rules",
+          "Free real estate",
+          `${free} of ${cells} cells`,
+          "Cells with no region rule to satisfy.",
         );
     }
+  }
+  if (summary.complete && summary.totalMs !== null && summary.totalMs > 0) {
+    const total = summary.totalMs;
     add(
-      "comparison",
+      "hard",
       "timing",
-      easy > hard ? "Plot twist" : "Easy meets Hard",
-      formatResultDuration(Math.abs(easy - hard)),
-      easy === hard
-        ? "Easy and Hard took exactly the same recorded time."
-        : `${easy > hard ? "Easy" : "Hard"} took this much longer than ${easy > hard ? "Hard" : "Easy"}.`,
+      "The Hard tax",
+      `${decimal((summary.records.hard!.first / total) * 100)}%`,
+      "Hard’s share of your total solve time.",
     );
-    const times = LEVELS.map((l) => summary.records[l]!.first);
-    const min = Math.min(...times),
-      max = Math.max(...times);
-    const names = (ms: number) =>
-      LEVELS.filter((l) => summary.records[l]!.first === ms)
-        .map(title)
-        .join(" & ");
-    add(
-      "gap",
-      "timing",
-      "The time gap",
-      formatResultDuration(max - min),
-      min === max
-        ? "All three recorded times are tied."
-        : `${names(max)} (longest) minus ${names(min)} (shortest); tied levels share their place.`,
-    );
+    const throughput = payload / (total / 60000);
+    if (validPips && Number.isFinite(throughput))
+      add("throughput", "rate", "Pip throughput", `${decimal(throughput)} pips/min`);
+    const pace = total / 1000 / dominoes.length;
+    if (validPips && dominoes.length && Number.isFinite(pace))
+      add(
+        "pace",
+        "rate",
+        "Domino tempo",
+        `${decimal(pace)} sec/domino`,
+        `Total solve time ÷ ${dominoes.length} dominoes.`,
+      );
   }
   return facts;
 }
 
-// Explicit stable ranking: no randomness or history-dependent comparisons.
 function hash(text: string): number {
   let n = 2166136261;
   for (let i = 0; i < text.length; i++) n = Math.imul(n ^ text.charCodeAt(i), 16777619);
   return n >>> 0;
 }
 export function getStapipstics(summary: DayResults, raw: RawDay): Stapipstic[] {
-  const seed = `stapipstics-v1:${summary.date}:${LEVELS.map((l) => summary.records[l]?.first ?? "missing").join(":")}`;
+  const seed = `stapipstics-v2:${summary.date}:${LEVELS.map((l) => summary.records[l]?.first ?? "missing").join(":")}`;
   const candidates = getStapipsticCandidates(summary, raw).sort(
     (a, b) =>
       hash(`${seed}:${a.id}`) - hash(`${seed}:${b.id}`) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
   );
-  const selected: Stapipstic[] = [];
-  for (const family of ["timing", "composition"] as const) {
-    const fact = candidates.find((f) => f.family === family);
-    if (fact) selected.push(fact);
-  }
+  // Always include puzzle composition; then prefer distinct subjects so rates or
+  // several views of the same pip distribution do not crowd out other facts.
+  const first = candidates.find((f) => f.family === "composition");
+  const selected: Stapipstic[] = first ? [first] : [];
   for (const fact of candidates) {
-    if (selected.length >= 3) break;
-    if (!selected.some((f) => f.id === fact.id)) selected.push(fact);
+    if (selected.length === 3) break;
+    if (!selected.some((f) => f.group === fact.group)) selected.push(fact);
   }
   return selected;
 }
