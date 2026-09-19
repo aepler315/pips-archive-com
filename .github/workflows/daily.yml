@@ -1,9 +1,11 @@
 name: Fetch today's puzzle
 on:
   schedule:
-    - cron: '5,20,35,50 0 * * *'
+    # Scheduled events are best-effort and may be delayed or dropped. Retry
+    # densely around rollover so one missed event cannot make the archive late.
+    - cron: '4/5 0-1 * * *'
       timezone: America/New_York
-    - cron: '17 1-23 * * *'
+    - cron: '23 2-23 * * *'
       timezone: America/New_York
   workflow_dispatch:
     inputs:
