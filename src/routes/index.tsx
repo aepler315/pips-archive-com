@@ -1,3 +1,4 @@
+import { useAllResults } from "@/lib/pips/use-daily-results";
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight, ChevronsRight } from "lucide-react";
@@ -9,7 +10,7 @@ import { LEVELS } from "@/lib/pips/engine";
 import { prefetchDay } from "@/lib/pips/days";
 import { resultKeyOf } from "@/lib/pips/random";
 import { groupMonths, monthChip, monthLabel, resolveMonth } from "@/lib/pips/months";
-import { allResults, fmt, type Result } from "@/lib/pips/store";
+import { fmt, type Result } from "@/lib/pips/store";
 import type { IndexEntry } from "@/lib/pips/types";
 import { useArchiveIndex } from "@/lib/pips/use-archive";
 import { cn } from "@/lib/utils";
@@ -61,8 +62,7 @@ function weekdayLabels() {
 function Home() {
   const { month: requested } = Route.useSearch();
   const idx = useArchiveIndex();
-  const [browser, setBrowser] = useState(false);
-  useEffect(() => setBrowser(true), []);
+  const { ready: browser, results: savedResults } = useAllResults();
 
   const puzzles = useMemo(() => idx.puzzles.slice().reverse(), [idx]);
   const months = useMemo(() => groupMonths(puzzles), [puzzles]);
@@ -79,8 +79,8 @@ function Home() {
   // per date-and-level (hundreds to thousands of calls as the archive grows).
   const results = useMemo<ResultMap>(() => {
     if (!browser) return new Map();
-    return new Map(allResults().map((r) => [resultKeyOf(r.date, r.level), r]));
-  }, [browser]);
+    return new Map(savedResults.map((r) => [resultKeyOf(r.date, r.level), r]));
+  }, [browser, savedResults]);
 
   const solvedCount = useMemo(() => {
     if (!browser) return 0;
@@ -303,7 +303,7 @@ function DayDialog({
                   >
                     <span className="font-medium">{l[0].toUpperCase() + l.slice(1)}</span>
                     <span className="flex items-center gap-1.5 text-sm tabular-nums">
-                      {r ? `Solved in ${fmt(r.best)}` : "Not solved"}
+                      {r ? `Solved in ${fmt(r.first)}` : "Not solved"}
                       <ChevronsRight className="size-4" aria-hidden="true" />
                     </span>
                   </Link>
