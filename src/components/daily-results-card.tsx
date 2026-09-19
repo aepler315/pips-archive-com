@@ -7,14 +7,6 @@ export function DailyResultsCard({ summary, facts }: { summary: DayResults; fact
   return (
     <article className="daily-results-card" aria-label="Daily puzzle results">
       <header className="results-card-header">
-        <div className="results-eyebrow">
-          <span className="results-pip-mark" aria-hidden="true">
-            <i />
-            <i />
-            <i />
-          </span>{" "}
-          THE DAILY THREE
-        </div>
         <h2>
           {summary.complete ? (
             <>
@@ -30,7 +22,7 @@ export function DailyResultsCard({ summary, facts }: { summary: DayResults; fact
             </>
           )}
         </h2>
-        <p className="results-date">Pips · {formatResultDate(summary.date)}</p>
+        <p className="results-date">{formatResultDate(summary.date)}</p>
       </header>
       <div className="results-scores">
         {LEVELS.map((level, i) => (
@@ -44,14 +36,14 @@ export function DailyResultsCard({ summary, facts }: { summary: DayResults; fact
             <strong>
               {summary.records[level] ? formatResultDuration(summary.records[level].first) : "—"}
             </strong>
-            <span className="results-score-status">
-              {summary.records[level] ? "Recorded" : "Not solved"}
-            </span>
+            {!summary.records[level] ? (
+              <span className="results-score-status">Not solved</span>
+            ) : null}
           </section>
         ))}
       </div>
       <div className="results-total">
-        <span>{summary.complete ? "Total recorded time" : "Puzzles recorded"}</span>
+        <span>{summary.complete ? "Total time" : "Puzzles solved"}</span>
         <strong>
           {summary.complete && summary.totalMs !== null
             ? formatResultDuration(summary.totalMs)
@@ -60,26 +52,21 @@ export function DailyResultsCard({ summary, facts }: { summary: DayResults; fact
       </div>
       {facts.length > 0 ? (
         <section className="results-facts" aria-label="Stapipstics">
-          <h3>
-            Stapipstics<span aria-hidden="true"> ✳</span>
-          </h3>
-          <p className="results-facts-intro">A few oddly satisfying facts.</p>
+          <h3>Stapipstics</h3>
           <dl>
             {facts.map((f) => (
               <div key={f.id} className="results-fact">
                 <dt>{f.label}</dt>
                 <dd>
                   <strong>{f.value}</strong>
-                  <span>{f.explanation}</span>
+                  {f.explanation ? <span>{f.explanation}</span> : null}
                 </dd>
               </div>
             ))}
           </dl>
         </section>
       ) : null}
-      <footer className="results-card-brand">
-        pipsarchive.com<span>First times. Yours to keep.</span>
-      </footer>
+      <footer className="results-card-brand">pipsarchive.com</footer>
     </article>
   );
 }
