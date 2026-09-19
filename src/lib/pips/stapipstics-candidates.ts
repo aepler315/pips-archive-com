@@ -4,7 +4,7 @@ import { buildDailyResults, type DayResults } from "./daily-results";
 export type Stapipstic = {
   id: string;
   family: "timing" | "composition" | "curiosity";
-  group: "halves" | "pairs" | "rules" | "timing" | "rate";
+  group: "halves" | "pairs" | "rules" | "timing" | "rate" | "history" | "cross-puzzle";
   label: string;
   value: string;
   explanation: string;

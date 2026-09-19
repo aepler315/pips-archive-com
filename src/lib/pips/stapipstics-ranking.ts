@@ -2,6 +2,11 @@ import { LEVELS, type RawDay } from "./engine";
 import { buildDailyResults, type DayResults } from "./daily-results";
 import { getStapipsticCandidates, type Stapipstic } from "./stapipstics-candidates";
 
+import { historyFacts } from "./stapipstics-history";
+import { timingFacts } from "./stapipstics-timing";
+import { compositionFacts } from "./stapipstics-composition";
+import type { ResultHistory } from "./stapipstics-extra-types";
+
 export type Evaluation = {
   id: string;
   fact: Stapipstic | null;
@@ -12,7 +17,11 @@ export type Evaluation = {
 };
 // Editorial salience, not population percentiles. Scores reward concentration,
 // extremes, and rule variety. The fixed catalog order breaks exact ties.
-export function evaluateStapipstics(input: DayResults, raw: RawDay): Evaluation[] {
+export function evaluateStapipstics(
+  input: DayResults,
+  raw: RawDay,
+  history: ResultHistory = [],
+): Evaluation[] {
   const summary = buildDailyResults(input.date, input.records);
   const candidates = new Map(getStapipsticCandidates(summary, raw).map((f) => [f.id, f]));
   const dominoes = LEVELS.flatMap((l) => raw[l].dominoes);
@@ -60,6 +69,17 @@ export function evaluateStapipstics(input: DayResults, raw: RawDay): Evaluation[
       reason: !fact ? "insufficient-data" : id === "hard" ? "already-shown" : "lower-ranked",
     };
   });
+  for (const extra of [
+    ...historyFacts(summary, history),
+    ...timingFacts(summary),
+    ...compositionFacts(summary, raw),
+  ]) {
+    evaluations.push({
+      ...extra,
+      selected: false,
+      reason: extra.fact ? "lower-ranked" : "insufficient-data",
+    });
+  }
   const groups = new Set<Stapipstic["group"]>();
   for (const evaluation of [...evaluations].sort((a, b) => b.score - a.score)) {
     if (!evaluation.fact || evaluation.reason === "already-shown") continue;
@@ -72,8 +92,12 @@ export function evaluateStapipstics(input: DayResults, raw: RawDay): Evaluation[
   }
   return evaluations;
 }
-export function getStapipstics(summary: DayResults, raw: RawDay): Stapipstic[] {
-  return evaluateStapipstics(summary, raw)
+export function getStapipstics(
+  summary: DayResults,
+  raw: RawDay,
+  history: ResultHistory = [],
+): Stapipstic[] {
+  return evaluateStapipstics(summary, raw, history)
     .filter((e) => e.selected)
     .sort((a, b) => b.score - a.score)
     .map((e) => e.fact!);

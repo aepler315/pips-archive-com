@@ -30,7 +30,10 @@ export function DailyResultsDialog({
     () => buildPersistentMetrics(summary, history.results),
     [summary, history.results],
   );
-  const facts = useMemo(() => getStapipstics(summary, raw), [summary, raw]);
+  const facts = useMemo(
+    () => getStapipstics(summary, raw, history.results),
+    [summary, raw, history.results],
+  );
   const text = summary.complete ? buildDailyShareText(summary) : "";
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
