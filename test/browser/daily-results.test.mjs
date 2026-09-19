@@ -66,6 +66,27 @@ for (const engine of engines) {
         assert.match(await page.getByRole("dialog").innerText(), /Solved in 02:00/);
       },
     );
+    await t.test("history-based facts reach the card and preserve fixed metrics", async () => {
+      await seed(page, { easy: record(60000), medium: record(62000), hard: record(30000) });
+      await page.evaluate((value) => {
+        for (let day = 14; day <= 18; day++)
+          for (const level of ["easy", "medium", "hard"])
+            localStorage.setItem(
+              `pips-archive:v1:result:2026-09-${day}:${level}`,
+              JSON.stringify(value),
+            );
+      }, record(120000));
+      await play(page);
+      await openResults(page);
+      await page.getByText("Clean sweep", { exact: true }).waitFor();
+      assert.match(await page.locator(".results-facts").innerText(), /Easy: 5 prior solves/);
+      assert.match(
+        await page.locator(".results-score-easy .results-score-metrics").innerText(),
+        /Average 01:50\n6 first solves/,
+      );
+      assert.equal(await page.locator(".results-fact").count(), 3);
+      await page.keyboard.press("Escape");
+    });
     await t.test(
       "all six completion orders celebrate once; practice cannot replace first",
       async () => {
