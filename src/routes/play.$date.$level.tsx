@@ -349,6 +349,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const attempt = useRef<{ ms: number; generation: number } | null>(null);
   const generation = useRef(0);
   const dateButtonRef = useRef<HTMLButtonElement>(null);
+  const solvedResultsButtonRef = useRef<HTMLButtonElement>(null);
   const resultsFocusRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     alive.current = true;
@@ -518,8 +519,8 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const restoreResultsFocus = useCallback(() => {
     const target =
       (resultsFocusRef.current?.isConnected ? resultsFocusRef.current : null) ??
-      dateButtonRef.current ??
-      solvedBannerRef.current;
+      solvedResultsButtonRef.current ??
+      dateButtonRef.current;
     if (!target) return;
     target.focus();
     requestAnimationFrame(() => {
@@ -971,6 +972,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
               </Button>
             ) : prior ? (
               <Button
+                ref={solvedResultsButtonRef}
                 variant="secondary"
                 size="sm"
                 aria-label={`View results for ${dateLabel}`}
