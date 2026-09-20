@@ -50,3 +50,14 @@ No population ranking or validated human-difficulty model is claimed. The option
 future experiment remains inactive. Bounded results are proven lower bounds;
 retries keep the strongest bound, never add overlapping runs. Calibration import
 rejection preserves solve records and blocks silent replacement of the baseline.
+
+## GitHub verification follow-up
+
+PR #38 was merged before CI finished. PR #39 corrects a final calibration subtype
+annotation and the cross-browser lifecycle failures discovered in the full suite.
+GitHub run 35491905038 passed typecheck, lint, all 143 unit tests, the standard build,
+and all 51 browser checks across Chromium, Firefox and WebKit. Its follow-up captures
+full performance panels and resets focus suppression for each new solve attempt.
+Screenshots are attached to the CI runs, including exact/incomplete recaps and
+calibration/performance states. The separate analysis workflow also generated
+September 20 metadata successfully on main.

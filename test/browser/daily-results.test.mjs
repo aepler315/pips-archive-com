@@ -527,7 +527,9 @@ for (const engine of engines) {
     await page.goto(`${base}/stats`);
     await page.getByRole("region", { name: "Personal performance" }).waitFor();
     await page.getByText("1 / 10 calibration solves").waitFor();
-    await page.screenshot({ path: `test-artifacts/${engine}-calibration.png` });
+    await page
+      .getByRole("region", { name: "Personal performance" })
+      .screenshot({ path: `test-artifacts/${engine}-calibration.png` });
     const data = {};
     for (let i = 1; i <= 20; i++)
       for (const level of ["easy", "medium", "hard"]) {
@@ -545,7 +547,9 @@ for (const engine of engines) {
     await page.reload();
     await page.getByText("200.0 current form", { exact: true }).waitFor();
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-    await page.screenshot({ path: `test-artifacts/${engine}-performance.png` });
+    await page
+      .getByRole("region", { name: "Personal performance" })
+      .screenshot({ path: `test-artifacts/${engine}-performance.png` });
     const other = await context.newPage();
     await other.goto(`${base}/stats`);
     const backup = await storeCall(page, "exportAll", []);
@@ -557,6 +561,21 @@ for (const engine of engines) {
     assert.deepEqual(
       JSON.parse(await storeCall(other, "exportAll", [])).analytics.baseline,
       before,
+    );
+    await storeCall(page, "eraseAll", []);
+    const nine = Object.fromEntries(
+      Object.entries(data).filter(([k]) => k.endsWith(":easy") && Number(k.slice(-7, -5)) <= 9),
+    );
+    await storeCall(page, "importAll", [JSON.stringify({ version: 1, data: nine })]);
+    await Promise.all([
+      storeCall(page, "recordSolve", ["2020-01-10", "easy", 1000]),
+      storeCall(other, "recordSolve", ["2020-01-11", "easy", 2000]),
+    ]);
+    const raced = JSON.parse(await storeCall(page, "exportAll", [])).analytics.baseline;
+    assert.equal(raced.levels.easy.anchor.length, 10);
+    assert.equal(
+      raced.levels.easy.anchor.filter((r) => ["2020-01-10", "2020-01-11"].includes(r.date)).length,
+      1,
     );
     await Promise.all([
       storeCall(page, "eraseAll", []),

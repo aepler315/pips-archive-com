@@ -530,6 +530,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   }, [date, level, puzzle, clock]);
 
   const solvedBannerRef = useRef<HTMLDivElement>(null);
+  const hasOpenedResults = useRef(false);
   const restoreResultsFocus = useCallback(() => {
     const target =
       (resultsFocusRef.current?.isConnected ? resultsFocusRef.current : null) ??
@@ -566,6 +567,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
 
   useEffect(() => {
     if (ev.solved && !solvedRef.current) {
+      hasOpenedResults.current = false;
       const now = performance.now();
       const ms = clock.read(now);
       clock.stop(now);
@@ -587,6 +589,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
         const active = document.activeElement;
         resultsFocusRef.current = active instanceof HTMLElement ? active : null;
       }
+      hasOpenedResults.current = true;
       dialogRef.current = true;
       clock.stop(performance.now());
       setDialogReason(reason);
@@ -619,7 +622,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   }, [autoPending, openResults, summary?.complete, date]);
 
   useEffect(() => {
-    if (solveMs === null || dialogReason || autoPending) return;
+    if (solveMs === null || dialogReason || autoPending || hasOpenedResults.current) return;
     const raf = requestAnimationFrame(() => {
       if (!document.querySelector('[role="dialog"], [role="alertdialog"]'))
         solvedBannerRef.current?.focus();
@@ -828,6 +831,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
 
   function doReset() {
     if (writeBusy.current || (attempt.current && saveFailed)) return;
+    hasOpenedResults.current = false;
     generation.current++;
     attempt.current = null;
     setAutoPending(false);

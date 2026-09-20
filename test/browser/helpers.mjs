@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { build } from "vite";
 import { chromium, firefox, webkit } from "playwright";
@@ -31,6 +31,9 @@ export async function preview() {
       lib: { entry: resolve("src/lib/pips/store.ts"), formats: ["es"], fileName: () => "store.js" },
     },
   });
+  // Seed origin storage on an inert same-origin document. App hydration and
+  // background prefetches must not race the next scenario's navigation.
+  await writeFile(resolve(outDir, "seed.html"), "<!doctype html><title>Test storage setup</title>");
   if (process.env.PIPS_TEST_URL)
     return async () => {
       await rm(outDir, { recursive: true, force: true });
@@ -95,7 +98,7 @@ export async function launch(name) {
   );
 }
 export async function seed(page, records, day = date) {
-  await page.goto(base);
+  await page.goto(`${base}/__results_test__/seed.html`);
   await page.evaluate(
     ({ records, day }) => {
       localStorage.clear();

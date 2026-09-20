@@ -120,7 +120,14 @@ export function subscribeResults(listener: () => void): () => void {
 export async function withResultLock<T>(run: () => T): Promise<T> {
   if (typeof navigator === "undefined" || !navigator.locks?.request)
     throw new Error("Safe result saving requires Web Locks");
-  return navigator.locks.request("pips-archive:results", run);
+  return navigator.locks.request("pips-archive:results", async () => {
+    // Cross-process storage snapshots can outlive the lock callback's microtask.
+    // Read in a fresh task, then let writes flush before releasing the lock.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    const result = run();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    return result;
+  });
 }
 
 // Unlike display reads, mutation reads must distinguish missing from corrupt/blocked.

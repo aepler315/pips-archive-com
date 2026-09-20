@@ -16,7 +16,10 @@ export const eligible = (r: AnchorRecord) =>
   r.first > 0 &&
   typeof r.solvedAt === "string" &&
   Number.isFinite(time(r.solvedAt));
-export const orderedRecords = (records: AnchorRecord[], asOf = "9999-12-31T23:59:59.999Z") => {
+export const orderedRecords = <T extends AnchorRecord>(
+  records: T[],
+  asOf = "9999-12-31T23:59:59.999Z",
+) => {
   const seen = new Set<string>();
   return records
     .filter((r) => eligible(r) && time(r.solvedAt) <= time(asOf))
