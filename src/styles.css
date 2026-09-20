@@ -127,9 +127,10 @@
   z-index: 2;
   background: #fffdf8;
 }
-/* Close control sits over the dialog; keep title clear of it. PNG export skips this. */
-.daily-results-dialog .daily-results-card {
-  padding-top: 44px;
+/* Keep the title out of the close control without changing card height.
+   PNG export clones the card outside this dialog and must match on-screen height. */
+.daily-results-dialog .results-scroll {
+  padding-top: 28px;
 }
 .daily-results-dialog .results-card-header {
   padding: 0 36px;
@@ -141,7 +142,7 @@
 }
 .daily-results-card {
   --results-card-padding: 20px;
-  padding: 16px var(--results-card-padding) 14px;
+  padding: 20px var(--results-card-padding) 14px;
   color: #1c1917;
   background: #fffdf8;
   border-radius: 22px;
@@ -278,6 +279,11 @@
 }
 .results-winning-count p + p {
   margin-top: 2px;
+}
+.results-winning-count .text-sm,
+.results-winning > .text-sm {
+  font-size: 0.68rem;
+  line-height: 1.35;
 }
 .results-facts dl {
   display: grid;
