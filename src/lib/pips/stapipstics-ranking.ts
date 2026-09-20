@@ -1,5 +1,3 @@
-import type { DayAnalysis } from "./puzzle-analysis";
-import { winningFact } from "./stapipstics-solutions";
 import { LEVELS, type RawDay } from "./engine";
 import { buildDailyResults, type DayResults } from "./daily-results";
 import { getStapipsticCandidates, type Stapipstic } from "./stapipstics-candidates";
@@ -29,7 +27,6 @@ export function evaluateStapipstics(
   input: DayResults,
   raw: RawDay,
   history: ResultHistory = [],
-  analysis: DayAnalysis = {},
 ): Evaluation[] {
   const summary = buildDailyResults(input.date, input.records);
   const candidates = new Map(getStapipsticCandidates(summary, raw).map((f) => [f.id, f]));
@@ -89,15 +86,6 @@ export function evaluateStapipstics(
       reason: extra.fact ? "lower-ranked" : "insufficient-data",
     });
   }
-  const solutions = winningFact(summary, analysis);
-  evaluations.push({
-    id: "solutions",
-    fact: solutions,
-    score: 0,
-    selected: false,
-    pinned: !!solutions,
-    reason: solutions ? "lower-ranked" : "insufficient-data",
-  });
   const groups = new Set<Stapipstic["group"]>();
   for (const evaluation of [...evaluations].sort(
     (a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.score - a.score,
@@ -116,9 +104,8 @@ export function getStapipstics(
   summary: DayResults,
   raw: RawDay,
   history: ResultHistory = [],
-  analysis: DayAnalysis = {},
 ): Stapipstic[] {
-  return evaluateStapipstics(summary, raw, history, analysis)
+  return evaluateStapipstics(summary, raw, history)
     .filter((e) => e.selected)
     .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.score - a.score)
     .map((e) => e.fact!);

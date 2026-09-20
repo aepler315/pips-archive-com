@@ -9,6 +9,7 @@ export function buildDailyShareText(summary: DayResults): string {
       (l) =>
         `${l[0].toUpperCase() + l.slice(1)}: ${formatResultDuration(summary.records[l]!.first)}`,
     ),
+    "pipsarchive.com",
   ].join("\n");
 }
 export function copyDailyResults(

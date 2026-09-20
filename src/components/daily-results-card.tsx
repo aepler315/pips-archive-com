@@ -1,5 +1,6 @@
 import type { DayAnalysis } from "../lib/pips/puzzle-analysis";
 import React from "react";
+import { winningFact } from "../lib/pips/stapipstics-solutions";
 import { LEVELS } from "../lib/pips/engine";
 import { formatResultDate, formatResultDuration, type DayResults } from "../lib/pips/daily-results";
 import type { Stapipstic } from "../lib/pips/stapipstics";
@@ -17,6 +18,7 @@ export function DailyResultsCard({
   analysis?: DayAnalysis;
   metrics?: PersistentMetrics;
 }) {
+  const winning = winningFact(summary, analysis);
   return (
     <article className="daily-results-card" aria-label="Daily puzzle results">
       <header className="results-card-header">
@@ -80,6 +82,21 @@ export function DailyResultsCard({
             : `${summary.solvedCount} / 3`}
         </strong>
       </div>
+      <section className="results-winning" aria-label="Winning arrangements">
+        <h3>Winning arrangements</h3>
+        {winning ? (
+          <div className="results-winning-count">
+            <p>
+              <strong>{winning.value}</strong>
+            </p>
+            <p className="text-sm text-muted-foreground">{winning.explanation}</p>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground" role="status">
+            Winning-arrangement analysis unavailable
+          </p>
+        )}
+      </section>
       {facts.length > 0 ? (
         <section className="results-facts" aria-label="Stapipstics">
           <h3>Stapipstics</h3>
@@ -95,32 +112,6 @@ export function DailyResultsCard({
             ))}
           </dl>
         </section>
-      ) : null}
-      {!facts.some((f) => f.id === "solutions") ? (
-        <p className="text-sm text-muted-foreground" role="status">
-          Winning-arrangement analysis unavailable
-        </p>
-      ) : null}
-      {LEVELS.some((l) => summary.records[l] && analysis[l]?.structural) ? (
-        <details className="mt-3 text-sm">
-          <summary>Structural challenge — experimental</summary>
-          <p>Solver work, not measured human difficulty. Separate from personal performance.</p>
-          {LEVELS.map((l) => {
-            const a = analysis[l];
-            const s = a?.structural;
-            return summary.records[l] && s ? (
-              <p key={l}>
-                <span className="capitalize">{l}</span>:{" "}
-                {s.status === "complete"
-                  ? `${s.medianFirstSolutionNodes} median first-solution nodes across eight traces`
-                  : "Analysis incomplete"}
-                {s.percentile !== null
-                  ? ` · ${s.percentile.toFixed(1)} / 100 (${s.referenceVersion}; 90/90 reference puzzles)`
-                  : " · Reference score unavailable"}
-              </p>
-            ) : null;
-          })}
-        </details>
       ) : null}
       <footer className="results-card-brand">pipsarchive.com</footer>
     </article>

@@ -15,16 +15,16 @@ const result = {
   lastAt: "2026-09-19T00:00:00.000Z",
 };
 const analysis = sidecar.analyses as Record<string, PuzzleAnalysis>;
-test("counts are pinned, incomplete is explicit and unsolved counts are hidden", () => {
+test("counts are separate, incomplete is explicit and unsolved counts are hidden", () => {
   const summary = buildDailyResults(raw.printDate, { easy: result, medium: null, hard: null });
   const fact = winningFact(summary, analysis)!;
   assert.match(fact.value, /Easy: 3/);
   assert.doesNotMatch(fact.value, /Medium|Hard/);
-  const selected = evaluateStapipstics(summary, raw as unknown as RawDay, [], analysis).filter(
+  const selected = evaluateStapipstics(summary, raw as unknown as RawDay, []).filter(
     (e) => e.selected,
   );
   assert.equal(selected.length, 3);
-  assert.equal(selected.find((e) => e.id === "solutions")?.reason, "pinned");
+  assert.equal(selected.some((e) => e.id === "solutions"), false);
   for (const lowerBound of ["0", "5"]) {
     const altered = {
       easy: {

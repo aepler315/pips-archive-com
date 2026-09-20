@@ -226,11 +226,13 @@
   color: #1c1917;
   font-variant-numeric: tabular-nums;
 }
-.results-facts {
+.results-facts,
+.results-winning {
   border-top: 1px solid #dfd7c8;
   padding-top: 16px;
 }
-.results-facts h3 {
+.results-facts h3,
+.results-winning h3 {
   font: 600 1.3rem var(--font-display);
   letter-spacing: -0.025em;
   display: flex;
@@ -399,4 +401,9 @@
 }
 .results-score-metrics small {
   font-size: 10px;
+}
+
+.results-winning-count {
+  padding: 10px 0 16px;
+  font-variant-numeric: tabular-nums;
 }
