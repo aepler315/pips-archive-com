@@ -101,7 +101,7 @@ export function DailyResultsDialog({
         }}
       >
         <DialogTitle ref={titleRef} tabIndex={-1} className="sr-only">
-          {summary.complete ? "Daily results — all three complete" : "Daily results — in progress"}
+          {summary.complete ? "Pips results — all three complete" : "Pips results — in progress"}
         </DialogTitle>
         <DialogDescription className="sr-only">
           Your first recorded times and puzzle facts for {summary.date}.

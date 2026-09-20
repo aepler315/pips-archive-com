@@ -25,13 +25,13 @@ export function DailyResultsCard({
         <h2>
           {summary.complete ? (
             <>
-              All three.
+              Pips complete.
               <br />
               <em>Nicely done.</em>
             </>
           ) : (
             <>
-              A little more.
+              Pips in progress.
               <br />
               <em>You’re on your way.</em>
             </>
