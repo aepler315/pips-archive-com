@@ -38,6 +38,18 @@ test("counts that agree fall through to how far the rules narrowed the board", (
   assert.equal(summary, "Medium's rules ruled out all but one of 900,000 possible layouts.");
 });
 
+test("the narrowing sentence picks the board whose rules cut the most", () => {
+  // Both quotients floor to 1, so an integer comparison would keep whichever
+  // level came first; Medium is the one that actually halved the space.
+  assert.equal(
+    solutionSummary(allSolved, {
+      easy: entry("easy", "99", "100"),
+      medium: entry("medium", "51", "100"),
+    }),
+    "Medium's rules ruled out all but 51 of 100 possible layouts.",
+  );
+});
+
 test("a tie with no usable unconstrained count still says something true", () => {
   const tie = (level: Level, winning: string): PuzzleAnalysis =>
     ({
@@ -144,8 +156,18 @@ test("abbreviated counts round to nearest rather than flooring", () => {
   assert.equal(approxCount(999_999_999n), "1 billion");
   assert.equal(approxCount(999_949_999n), "999.9 million");
   assert.equal(approxCount(10n ** 18n * 999n + 10n ** 17n * 9n), "999.9 quintillion");
-  // A value that would round past the last scale word falls back to exponent form.
-  assert.equal(approxCount(10n ** 21n - 1n), "9.9 × 10^20");
+  // A value that would round past the last scale word falls back to exponent
+  // form, where it rounds up to the next power rather than reading 9.9.
+  assert.equal(approxCount(10n ** 21n - 1n), "1.0 × 10^21");
+});
+
+test("the exponent mantissa rounds, and carries into the power", () => {
+  // A real archived count: 3.078e21 is "3.1", not the truncated "3.0".
+  assert.equal(approxCount(3_078_334_925_934_428_160_000n), "3.1 × 10^21");
+  assert.equal(approxCount(3_040_000_000_000_000_000_000n), "3.0 × 10^21");
+  assert.equal(approxCount(3_050_000_000_000_000_000_000n), "3.1 × 10^21");
+  // 9.96e21 rounds to 1.0e22 rather than the malformed "10.0 × 10^21".
+  assert.equal(approxCount(9_960_000_000_000_000_000_000n), "1.0 × 10^22");
 });
 
 test("the row label is the plain-English one the card renders", () => {

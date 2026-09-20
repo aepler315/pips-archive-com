@@ -82,7 +82,11 @@ export function DailyResultsCard({
           {rows.map((f) => (
             <div key={f.id} className="results-fact">
               <dt>{f.label}</dt>
-              <dd>{f.value}</dd>
+              {/* The board count resolves after the dialog has opened and focus
+                  has landed on the title, so its value is a polite live region
+                  — the row itself always exists, which is what lets a screen
+                  reader announce the count replacing "Unavailable". */}
+              <dd aria-live={f.id === "solutions" ? "polite" : undefined}>{f.value}</dd>
             </div>
           ))}
         </dl>

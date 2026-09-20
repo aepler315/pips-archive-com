@@ -204,7 +204,7 @@ function StatsPage() {
               const text =
                 `Imported ${imported} result${imported === 1 ? "" : "s"}.` +
                 (analytics === "rejected"
-                  ? " Analytics baseline rejected: it does not match your recorded solve times."
+                  ? " Analytics baseline rejected: it does not match the results saved in this browser."
                   : analytics === "failed"
                     ? " Analytics could not be saved."
                     : "") +

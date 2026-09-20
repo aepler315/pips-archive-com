@@ -37,9 +37,17 @@ const SCALES = [
   [10n ** 6n, "million"],
 ] as const;
 
+/** Scientific notation to one decimal, rounded rather than truncated — and the
+ *  carry matters: 9.96e21 is 1.0e22, not 10.0e21. */
 const exponent = (value: bigint) => {
   const digits = value.toString();
-  return `${digits[0]}.${digits[1]} × 10^${digits.length - 1}`;
+  let power = digits.length - 1;
+  let mantissa = (BigInt(digits.slice(0, 3).padEnd(3, "0")) + 5n) / 10n;
+  if (mantissa >= 100n) {
+    mantissa /= 10n;
+    power += 1;
+  }
+  return `${(Number(mantissa) / 10).toFixed(1)} × 10^${power}`;
 };
 
 /** Tenths of `size`, rounded half up rather than floored: plain integer
@@ -117,10 +125,13 @@ export function solutionSummary(summary: DayResults, analysis: DayAnalysis): str
 
   const narrowed = entries
     .filter((e): e is Counted & { unconstrained: bigint } => e.unconstrained !== null)
+    // Cross-multiplied rather than divided: 100-of-99 and 100-of-51 both floor
+    // to a quotient of 1, which would hand the sentence to whichever level came
+    // first instead of the one that actually narrowed the board most.
     .sort((a, b) => {
-      const ratioA = a.unconstrained / a.winning;
-      const ratioB = b.unconstrained / b.winning;
-      return ratioA < ratioB ? 1 : ratioA > ratioB ? -1 : 0;
+      const left = a.unconstrained * b.winning;
+      const right = b.unconstrained * a.winning;
+      return left < right ? 1 : left > right ? -1 : 0;
     })[0];
   if (narrowed)
     return `${name(narrowed.level)}'s rules ruled out all but ${plain(narrowed.winning)} of ${approxCount(narrowed.unconstrained)} possible layouts.`;
