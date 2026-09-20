@@ -567,6 +567,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
 
   useEffect(() => {
     if (ev.solved && !solvedRef.current) {
+      hasOpenedResults.current = false;
       const now = performance.now();
       const ms = clock.read(now);
       clock.stop(now);
@@ -830,6 +831,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
 
   function doReset() {
     if (writeBusy.current || (attempt.current && saveFailed)) return;
+    hasOpenedResults.current = false;
     generation.current++;
     attempt.current = null;
     setAutoPending(false);
