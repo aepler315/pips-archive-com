@@ -57,21 +57,47 @@ test("completed card keeps date and times without redundant labels or decoration
   assert.doesNotMatch(html, /<span><\/span>/);
 });
 
-test("averages and shares stay visible even without rotating facts", () => {
+test("each solved column carries one signed gap against its average, or nothing", () => {
   const result = { first: 60000, best: 1000, plays: 9, solvedAt: "", lastAt: "" };
   const html = renderToStaticMarkup(
     React.createElement(card.DailyResultsCard, {
       summary: buildDailyResults("2026-09-19", { easy: result, medium: result, hard: result }),
       facts: [],
       metrics: {
-        easy: { averageMs: 90000, count: 2, sharePercent: 100 / 3 },
-        medium: { averageMs: 60000, count: 1, sharePercent: 100 / 3 },
-        hard: { averageMs: null, count: 0, sharePercent: 100 / 3 },
+        easy: { averageMs: 90000, count: 2, deltaMs: -30000 },
+        medium: { averageMs: 59500, count: 1, deltaMs: 500 },
+        hard: { averageMs: null, count: 0, deltaMs: null },
       },
     }),
   );
-  assert.match(html, /Average 01:30/);
-  assert.match(html, /2 first solves/);
-  assert.equal((html.match(/33.3%/g) ?? []).length, 3);
-  assert.match(html, /Average —/);
+  assert.match(html, /−00:30 vs avg/);
+  // Under a second either way reads as "even" rather than a misleading +00:00.
+  assert.match(html, /even vs avg/);
+  // Hard has no history to compare against, so it gets no line at all.
+  assert.equal((html.match(/vs avg/g) ?? []).length, 2);
+  assert.doesNotMatch(html, /Average|first solves|% of total/);
+});
+
+test("the winning-arrangement count leads the stapipstics list instead of owning a section", () => {
+  const result = { first: 60000, best: 1000, plays: 9, solvedAt: "", lastAt: "" };
+  const html = renderToStaticMarkup(
+    React.createElement(card.DailyResultsCard, {
+      summary: buildDailyResults("2026-09-19", { easy: result, medium: result, hard: result }),
+      facts: [
+        {
+          id: "throughput",
+          family: "curiosity" as const,
+          group: "rate" as const,
+          label: "Pip throughput",
+          value: "28.8 pips/min",
+          explanation: "Pips placed per minute across all three puzzles.",
+        },
+      ],
+    }),
+  );
+  assert.equal((html.match(/<h3>/g) ?? []).length, 1);
+  assert.match(html, /Stapipstics/);
+  // Explanations are dropped from the card: label and value only.
+  assert.match(html, /Pip throughput/);
+  assert.doesNotMatch(html, /Pips placed per minute/);
 });

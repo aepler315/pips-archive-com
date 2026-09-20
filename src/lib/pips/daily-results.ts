@@ -38,6 +38,13 @@ export function formatResultDuration(ms: number): string {
   const seconds = Math.floor(ms / 1000);
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
+/** Signed gap against an average, e.g. `−00:47`, `+01:12`, `even`. Uses a real
+ *  minus sign so it lines up with the plus at the same tabular width. */
+export function formatResultDelta(ms: number): string {
+  if (!Number.isFinite(ms)) throw new Error("Invalid duration");
+  if (Math.abs(ms) < 1000) return "even";
+  return `${ms < 0 ? "−" : "+"}${formatResultDuration(Math.abs(ms))}`;
+}
 export function formatResultDate(date: string): string {
   if (!validResultDate(date)) throw new Error("Invalid puzzle date");
   const [year, month, day] = date.split("-");
