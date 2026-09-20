@@ -24,9 +24,17 @@ export function DailyResultsCard({
   metrics?: PersistentMetrics;
 }) {
   // The winning-arrangement count is a stapipstic like any other; it leads the
-  // list rather than owning a second heading of its own.
-  const winning = winningFact(summary, analysis);
-  const rows = winning ? [winning, ...facts] : facts;
+  // list rather than owning a second heading of its own. Analysis loads async
+  // and can 404, so keep a row either way — the count must not silently vanish.
+  const winning = winningFact(summary, analysis) ?? {
+    id: "solutions",
+    family: "curiosity" as const,
+    group: "solutions" as const,
+    label: "Winning arrangements",
+    value: "Unavailable",
+    explanation: "",
+  };
+  const rows = [winning, ...facts];
   return (
     <article className="daily-results-card" aria-label="Daily puzzle results">
       <header className="results-card-header">
@@ -63,19 +71,17 @@ export function DailyResultsCard({
             : `${summary.solvedCount} / 3`}
         </strong>
       </div>
-      {rows.length > 0 ? (
-        <section className="results-facts" aria-label="Stapipstics">
-          <h3>Stapipstics</h3>
-          <dl>
-            {rows.map((f) => (
-              <div key={f.id} className="results-fact">
-                <dt>{f.label}</dt>
-                <dd>{f.value}</dd>
-              </div>
-            ))}
-          </dl>
-        </section>
-      ) : null}
+      <section className="results-facts" aria-label="Stapipstics">
+        <h3>Stapipstics</h3>
+        <dl>
+          {rows.map((f) => (
+            <div key={f.id} className="results-fact">
+              <dt>{f.label}</dt>
+              <dd>{f.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
       <footer className="results-card-brand">pipsarchive.com</footer>
     </article>
   );

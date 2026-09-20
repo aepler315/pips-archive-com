@@ -132,9 +132,6 @@
 .daily-results-dialog .results-scroll {
   padding-top: 28px;
 }
-.daily-results-dialog .results-card-header {
-  padding: 0 36px;
-}
 .results-scroll {
   min-height: 0;
   overflow-y: auto;
@@ -159,13 +156,19 @@
   border-radius: 4px;
   padding: 5px 4px;
 }
+/* The 36px insets clear the dialog's close control, but they belong to the card
+   rather than the dialog: the PNG export clones the card onto document.body,
+   where a dialog-scoped rule would not apply and the headline would wrap at a
+   different width than it does on screen, changing the exported height. */
 .results-card-header {
   text-align: center;
+  padding: 0 36px;
 }
 .results-card-header h2 {
   margin: 2px 0 2px;
   font: 600 clamp(1.45rem, 6vw, 2rem)/1.08 var(--font-display);
   letter-spacing: -0.04em;
+  text-wrap: balance;
 }
 .results-card-header h2 em {
   font-weight: 500;

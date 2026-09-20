@@ -45,10 +45,9 @@ for (const engine of engines) {
         assert.equal(await page.getByRole("dialog").count(), 0);
         await openResults(page);
         assert.equal(await page.locator(".results-score-easy strong").innerText(), "02:00");
-        assert.match(
-          await page.locator(".results-score-easy .results-score-metrics").innerText(),
-          /24.5% of total\nAverage 02:00\n1 first solve/,
-        );
+        // Only today is seeded, so there is no other day to average against and
+        // the column carries no comparison line at all.
+        assert.equal(await page.locator(".results-score-easy .results-score-status").count(), 0);
         await page.keyboard.press("Escape");
         assert.match(await page.locator(":focus").getAttribute("aria-label"), /View results/);
         await page.reload();
@@ -79,12 +78,20 @@ for (const engine of engines) {
       await play(page);
       await openResults(page);
       await page.getByText("Clean sweep", { exact: true }).waitFor();
-      assert.match(await page.locator(".results-facts").innerText(), /Easy: 5 prior solves/);
+      // The card prints each fact's label and value; the per-level breakdown
+      // that used to follow ("Easy: 5 prior solves · …") was its explanation.
       assert.match(
-        await page.locator(".results-score-easy .results-score-metrics").innerText(),
-        /Average 01:50\n6 first solves/,
+        await page.locator(".results-facts").innerText(),
+        /Clean sweep\nAll three quicker than usual/,
       );
-      assert.equal(await page.locator(".results-fact").count(), 3);
+      // Five prior days at 02:00 each; today's easy was 01:00, so the column
+      // reports a full minute under the average of the days before it.
+      assert.equal(
+        await page.locator(".results-score-easy .results-score-status").innerText(),
+        "−01:00 vs avg",
+      );
+      // Three rotating facts plus the winning-arrangement row that leads them.
+      assert.equal(await page.locator(".results-fact").count(), 4);
       await page.keyboard.press("Escape");
     });
     await t.test(
@@ -495,8 +502,8 @@ for (const engine of engines) {
     await play(page);
     await openResults(page);
     await page.getByText("Easy: 3 · Medium: 1 · Hard: 2", { exact: true }).waitFor();
-    assert.match(await page.locator(".results-winning").innerText(), /Easy: 3 · Medium: 1 · Hard: 2/);
-    assert.equal(await page.locator(".results-facts .results-fact").count(), 3);
+    assert.match(await page.locator(".results-facts").innerText(), /Easy: 3 · Medium: 1 · Hard: 2/);
+    assert.equal(await page.locator(".results-facts .results-fact").count(), 4);
     assert.equal(await page.getByText("Structural challenge — experimental").count(), 0);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await mkdir("test-artifacts", { recursive: true });
@@ -514,15 +521,17 @@ for (const engine of engines) {
     await play(page);
     await openResults(page);
     await page.getByText(/At least 1 — count incomplete/).waitFor();
-    assert.doesNotMatch(await page.locator(".results-winning").innerText(), /Medium: 1|Hard: 2/);
+    assert.doesNotMatch(await page.locator(".results-facts").innerText(), /Medium: 1|Hard: 2/);
     await page.screenshot({ path: `test-artifacts/${engine}-incomplete-analysis.png` });
     await page.keyboard.press("Escape");
     await page.unroute("**/data/analysis/*.json");
     await page.route("**/data/analysis/*.json", (route) => route.fulfill({ status: 404 }));
     await play(page);
     await openResults(page);
-    await page.getByText("Winning-arrangement analysis unavailable").waitFor();
-    assert.equal(await page.locator(".results-fact").count(), 3);
+    // A missing analysis sidecar still leaves the row in place, so the count
+    // cannot quietly disappear from the card.
+    await page.getByText("Unavailable", { exact: true }).waitFor();
+    assert.equal(await page.locator(".results-fact").count(), 4);
     await page.keyboard.press("Escape");
     await page.goto(`${base}/stats`);
     await page.getByRole("region", { name: "Personal performance" }).waitFor();
