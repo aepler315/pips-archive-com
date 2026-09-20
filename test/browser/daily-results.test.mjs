@@ -526,7 +526,9 @@ for (const engine of engines) {
     await page.goto(`${base}/stats`);
     await page.getByRole("region", { name: "Personal performance" }).waitFor();
     await page.getByText("1 / 10 calibration solves").waitFor();
-    await page.screenshot({ path: `test-artifacts/${engine}-calibration.png` });
+    await page
+      .getByRole("region", { name: "Personal performance" })
+      .screenshot({ path: `test-artifacts/${engine}-calibration.png` });
     const data = {};
     for (let i = 1; i <= 20; i++)
       for (const level of ["easy", "medium", "hard"]) {
@@ -544,7 +546,9 @@ for (const engine of engines) {
     await page.reload();
     await page.getByText("200.0 current form", { exact: true }).waitFor();
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-    await page.screenshot({ path: `test-artifacts/${engine}-performance.png` });
+    await page
+      .getByRole("region", { name: "Personal performance" })
+      .screenshot({ path: `test-artifacts/${engine}-performance.png` });
     const other = await context.newPage();
     await other.goto(`${base}/stats`);
     const backup = await storeCall(page, "exportAll", []);
