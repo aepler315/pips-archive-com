@@ -83,6 +83,24 @@ test("a near-tie prefers narrowing, and states a fractional multiple without it"
   );
 });
 
+test("a multiple keeps its tenth where that still means something", () => {
+  const bare = (level: Level, winning: string): PuzzleAnalysis =>
+    ({
+      date: DATE,
+      level,
+      winning: exact(winning),
+      unconstrained: { status: "invalid", reason: "budget" },
+    }) as PuzzleAnalysis;
+  const between = (a: string, b: string) =>
+    solutionSummary(allSolved, { easy: bare("easy", a), medium: bare("medium", b) });
+  // 21 : 2 is 10.5×, not 10× — the tenth survives past the spread threshold.
+  assert.equal(between("21", "2"), "Easy had 10.5× as many ways to finish as Medium.");
+  // A ratio that rounds to a whole number loses the pointless ".0".
+  assert.equal(between("199", "100"), "Easy had 2× as many ways to finish as Medium.");
+  // Beyond a hundredfold the tenth is noise, so it rounds to a whole multiple.
+  assert.equal(between("12405", "10"), "Easy had 1,241× as many ways to finish as Medium.");
+});
+
 test("unsolved, mismatched and uncounted levels are left out", () => {
   const partial = buildDailyResults(DATE, { easy: result, medium: null, hard: null });
   // Medium is not solved, so its far larger count cannot drive the sentence.

@@ -66,13 +66,14 @@ export function approxCount(value: bigint): string {
   return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)} ${word}`;
 }
 
-/** "3.5×", "1,240×". Falls back to integer division once the ratio outgrows a
- *  float, which it does on puzzles whose counts differ by many orders. */
+/** "3.5×", "10.5×", "1,240×". Rounds rather than floors, and keeps the tenth
+ *  for as long as it tells the reader anything: past a hundredfold it is noise,
+ *  and past a float's reach only the rounded quotient survives. */
 function multiple(a: bigint, b: bigint): string {
-  const value = Number((a * 100n) / b) / 100;
-  if (Number.isFinite(value) && value < 10)
+  const value = Number(tenths(a, b)) / 10;
+  if (Number.isFinite(value) && value < 100)
     return `${Number.isInteger(value) ? value : value.toFixed(1)}×`;
-  return `${approxCount(a / b)}×`;
+  return `${approxCount((a + b / 2n) / b)}×`;
 }
 
 const ways = (n: bigint) => (n === 1n ? "one way" : `${approxCount(n)} ways`);
