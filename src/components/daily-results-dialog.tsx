@@ -42,8 +42,8 @@ export function DailyResultsDialog({
     [summary, history.results],
   );
   const facts = useMemo(
-    () => getStapipstics(summary, raw, history.results, analysis),
-    [summary, raw, history.results, analysis],
+    () => getStapipstics(summary, raw, history.results),
+    [summary, raw, history.results],
   );
   const display = { summary, facts, metrics, analysis };
   const [capture, setCapture] = useState<typeof display | null>(null);
@@ -54,7 +54,7 @@ export function DailyResultsDialog({
   const exporting = useRef(false);
   const visibleCard = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
-  async function share() {
+  async function copy() {
     setCopied(false);
     setCopyError(false);
     try {
@@ -126,12 +126,12 @@ export function DailyResultsDialog({
               <Download size={16} />
               {imageStatus === "busy" ? "Generating…" : "Download PNG"}
             </Button>
-            <Button onClick={() => void share()} disabled={!summary.complete}>
+            <Button onClick={() => void copy()} disabled={!summary.complete}>
               <Copy size={16} />
-              {copied ? "Copied!" : "Share"}
+              {copied ? "Copied!" : "Copy"}
             </Button>
           </div>
-          {!summary.complete ? <p>Finish all three to share your times.</p> : null}
+          {!summary.complete ? <p>Finish all three to copy your times.</p> : null}
           <p role="status" aria-live="polite">
             {imageStatus === "error"
               ? "Couldn’t create the PNG. Please try again."
@@ -149,7 +149,7 @@ export function DailyResultsDialog({
                 readOnly
                 value={text}
                 onFocus={(e) => e.target.select()}
-                rows={4}
+                rows={5}
               />
             </div>
           ) : null}

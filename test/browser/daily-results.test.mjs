@@ -122,7 +122,7 @@ for (const engine of engines) {
         await play(page, "easy", "2026-09-18");
         await openResults(page);
         assert.equal(await page.getByText("Not solved", { exact: true }).count(), 2);
-        assert.ok(await page.getByRole("button", { name: "Share", exact: true }).isDisabled());
+        assert.ok(await page.getByRole("button", { name: "Copy", exact: true }).isDisabled());
         assert.match(await page.locator(".results-date").innerText(), /09\/18\/2026/);
         const clock = await page.locator(".tabular-nums").first().innerText();
         await page.waitForTimeout(1100);
@@ -151,9 +151,9 @@ for (const engine of engines) {
           },
         }),
       );
-      await page.getByRole("button", { name: "Share", exact: true }).click();
+      await page.getByRole("button", { name: "Copy", exact: true }).click();
       await page.getByRole("button", { name: "Copied!", exact: true }).waitFor();
-      const expected = "Pips 09/19/2026\nEasy: 01:02\nMedium: 02:05\nHard: 04:05";
+      const expected = "Pips 09/19/2026\nEasy: 01:02\nMedium: 02:05\nHard: 04:05\npipsarchive.com";
       assert.equal(await page.evaluate(() => window.copiedResults), expected);
       await page.evaluate(() =>
         Object.defineProperty(navigator, "clipboard", {
@@ -494,9 +494,10 @@ for (const engine of engines) {
     await seed(page, { easy: record(), medium: record(), hard: record() });
     await play(page);
     await openResults(page);
-    await page.getByText("Winning arrangements", { exact: true }).waitFor();
-    assert.match(await page.locator(".results-facts").innerText(), /Easy: 3 · Medium: 1 · Hard: 2/);
-    assert.equal(await page.locator(".results-fact").count(), 3);
+    await page.getByText("Easy: 3 · Medium: 1 · Hard: 2", { exact: true }).waitFor();
+    assert.match(await page.locator(".results-winning").innerText(), /Easy: 3 · Medium: 1 · Hard: 2/);
+    assert.equal(await page.locator(".results-facts .results-fact").count(), 3);
+    assert.equal(await page.getByText("Structural challenge — experimental").count(), 0);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await mkdir("test-artifacts", { recursive: true });
     await page.screenshot({ path: `test-artifacts/${engine}-exact-analysis.png` });
@@ -513,7 +514,7 @@ for (const engine of engines) {
     await play(page);
     await openResults(page);
     await page.getByText(/At least 1 — count incomplete/).waitFor();
-    assert.doesNotMatch(await page.locator(".results-facts").innerText(), /Medium: 1|Hard: 2/);
+    assert.doesNotMatch(await page.locator(".results-winning").innerText(), /Medium: 1|Hard: 2/);
     await page.screenshot({ path: `test-artifacts/${engine}-incomplete-analysis.png` });
     await page.keyboard.press("Escape");
     await page.unroute("**/data/analysis/*.json");

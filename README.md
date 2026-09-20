@@ -88,17 +88,18 @@ today; `--all` also fills any dates missing before the first archived file.
 
 Your first successfully saved completion time for each date and difficulty is permanent in this browser. Faster and slower replays are practice; clearing the board does not remove the recorded time. Archive and statistics screens use that first time, including older backups that also contain a faster `best` value.
 
-Completing a date’s third puzzle opens its daily results card once. Click the date heading on a puzzle you have already completed to reopen it, including archived dates. A partially completed day shows saved times and “Not solved” for the rest; PNG download works, and Share becomes available after all three are recorded.
+Completing a date’s third puzzle opens its daily results card once. Click the date heading on a puzzle you have already completed to reopen it, including archived dates. A partially completed day shows saved times and “Not solved” for the rest; PNG download works, and Copy becomes available after all three are recorded.
 
 Stapipstics combine your recorded times with the actual dominoes in those three puzzles. The pool includes pip frequency, missing pip values, odd/even balance, repeated domino pairs, consecutive halves, the heaviest dominoes, region-rule mix, unrestricted cells, and solve-time rates. Each card picks up to three distinct subjects deterministically, so similar facts do not crowd each other out. They do not measure moves, mistakes, thinking speed, or performance against other players.
 
-Download PNG exports the full card at 2× resolution, without the controls or surrounding board. Share copies exactly:
+Download PNG exports the full card at 2× resolution, without the controls or surrounding board. Copy copies exactly:
 
 ```text
 Pips 09/19/2026
 Easy: 01:02
 Medium: 02:05
 Hard: 04:05
+pipsarchive.com
 ```
 
 Minutes do not wrap at an hour. If clipboard access is blocked, the same text appears for manual copying. If a completion cannot be safely saved, its attempt time stays frozen and Retry save uses that time. Keep that tab open until saving succeeds.
@@ -123,7 +124,7 @@ Editorial eligibility thresholds keep routine outcomes from displacing useful fa
 
 ### Winning arrangements and personal performance
 
-The daily recap reserves one Stapipstic for verified winning-arrangement counts.
+The daily recap shows verified winning-arrangement counts separately from its three Stapipstics.
 Identical tile swaps and double flips are ignored; different domino boundaries and
 fixed-board rotations/reflections count separately. Unfinished counts say “At least
 N — count incomplete.” Missing, stale or invalid metadata never blocks a solve or
@@ -151,7 +152,7 @@ bounds or weakening a previous result. Outputs are atomic and unchanged sidecars
 are not rewritten. The compact index contains hashes and structural features for
 bulk historical lookup.
 
-Expandable “Structural challenge — experimental” uses eight independently seeded,
+Structural analysis is not displayed on the results card. Offline analysis uses eight independently seeded,
 empty-board first-solution traces, not full-enumeration work. The frozen 90-puzzle
 `archive-90-v1` reference covers 30 puzzles per level across the archive. Its percentile
 is a solver-work comparison, not measured human difficulty. The benchmark reuses this
@@ -182,3 +183,5 @@ level), training-only normalization, at least 10% lower holdout log-time error a
 level more than 10% worse. Even a passing experiment requires a review of learning
 versus puzzle-selection confounding. It never writes coefficients or switches the
 active `level-anchor-v1` model automatically.
+
+Winning arrangements appears in its own section, separate from the three selected Stapipstics.
