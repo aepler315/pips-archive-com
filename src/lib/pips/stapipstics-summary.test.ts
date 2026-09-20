@@ -54,9 +54,11 @@ test("a tie with no usable unconstrained count still says something true", () =>
     }),
     "Every board had exactly 4 ways to finish.",
   );
+  // Only two levels were counted, so the sentence names them rather than
+  // claiming something about the board it had to leave out.
   assert.equal(
     solutionSummary(allSolved, { easy: tie("easy", "1"), medium: tie("medium", "1") }),
-    "Every board had exactly one way to finish.",
+    "Easy and Medium each had exactly one way to finish.",
   );
 });
 
@@ -114,6 +116,18 @@ test("big counts round to scale words and very big ones to exponents", () => {
   assert.equal(approxCount(2_412_883_904n), "2.4 billion");
   assert.equal(approxCount(10n ** 15n), "1 quadrillion");
   assert.equal(approxCount(10n ** 21n * 12n), "1.2 × 10^22");
+});
+
+test("abbreviated counts round to nearest rather than flooring", () => {
+  assert.equal(approxCount(1_999_999n), "2 million");
+  assert.equal(approxCount(1_949_999n), "1.9 million");
+  assert.equal(approxCount(1_950_000n), "2 million");
+  // Rounding carries this one over its own scale word.
+  assert.equal(approxCount(999_999_999n), "1 billion");
+  assert.equal(approxCount(999_949_999n), "999.9 million");
+  assert.equal(approxCount(10n ** 18n * 999n + 10n ** 17n * 9n), "999.9 quintillion");
+  // A value that would round past the last scale word falls back to exponent form.
+  assert.equal(approxCount(10n ** 21n - 1n), "9.9 × 10^20");
 });
 
 test("the row label is the plain-English one the card renders", () => {

@@ -37,17 +37,32 @@ const SCALES = [
   [10n ** 6n, "million"],
 ] as const;
 
+const exponent = (value: bigint) => {
+  const digits = value.toString();
+  return `${digits[0]}.${digits[1]} × 10^${digits.length - 1}`;
+};
+
+/** Tenths of `size`, rounded half up rather than floored: plain integer
+ *  division would render 1,999,999 as "1.9 million". */
+const tenths = (value: bigint, size: bigint) => (value * 10n + size / 2n) / size;
+
 /** A board count is a headline number, not an audit figure: 2.4 billion reads,
  *  2,412,883,904 does not. Exact below a million, rounded above it, and in
  *  exponent form past a quintillion where the scale words run out. */
 export function approxCount(value: bigint): string {
   if (value < 1_000_000n) return value.toLocaleString("en-US");
-  if (value >= 10n ** 21n) {
-    const digits = value.toString();
-    return `${digits[0]}.${digits[1]} × 10^${digits.length - 1}`;
+  if (value >= 10n ** 21n) return exponent(value);
+  const index = SCALES.findIndex(([threshold]) => value >= threshold);
+  let [size, word] = SCALES[index];
+  let scaled = tenths(value, size);
+  // Rounding can carry a value over its own scale — 999,999,999 is "1 billion",
+  // not "999.9 million" — so promote it rather than printing four digits.
+  if (scaled >= 10_000n) {
+    if (index === 0) return exponent(value);
+    [size, word] = SCALES[index - 1];
+    scaled = tenths(value, size);
   }
-  const [size, word] = SCALES.find(([threshold]) => value >= threshold)!;
-  const rounded = Number((value * 10n) / size) / 10;
+  const rounded = Number(scaled) / 10;
   return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)} ${word}`;
 }
 
@@ -62,6 +77,13 @@ function multiple(a: bigint, b: bigint): string {
 
 const ways = (n: bigint) => (n === 1n ? "one way" : `${approxCount(n)} ways`);
 const plain = (n: bigint) => (n === 1n ? "one" : approxCount(n));
+
+const listNames = (items: { level: Level }[]) => {
+  const names = items.map((item) => name(item.level));
+  return names.length < 2
+    ? (names[0] ?? "")
+    : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+};
 
 type Counted = { level: Level; winning: bigint; unconstrained: bigint | null };
 
@@ -103,7 +125,11 @@ export function solutionSummary(summary: DayResults, analysis: DayAnalysis): str
     return `${name(narrowed.level)}'s rules ruled out all but ${plain(narrowed.winning)} of ${approxCount(narrowed.unconstrained)} possible layouts.`;
 
   if (entries.length === 1) return null;
-  return high.winning === low.winning
+  if (high.winning !== low.winning) return spread;
+  // "Every board" is only true when every level was actually counted; an
+  // unsolved or uncounted one is omitted above and may differ, so name the
+  // boards the tie really covers.
+  return entries.length === LEVELS.length
     ? `Every board had exactly ${ways(high.winning)} to finish.`
-    : spread;
+    : `${listNames(entries)} each had exactly ${ways(high.winning)} to finish.`;
 }
