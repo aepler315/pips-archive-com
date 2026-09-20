@@ -279,6 +279,13 @@
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
+/* One sentence putting the day's board counts in context, under the list. */
+.results-summary {
+  margin: 8px 0 0;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: #8a8276;
+}
 .results-card-brand {
   display: flex;
   justify-content: space-between;

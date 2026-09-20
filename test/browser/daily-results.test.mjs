@@ -201,6 +201,10 @@ for (const engine of engines) {
         assert.ok(metrics.bottom <= height);
         assert.ok(await page.getByRole("button", { name: "Close", exact: true }).isVisible());
         assert.equal(await page.locator(".daily-results-card button").count(), 0);
+        // The analysis sidecar arrives after the dialog opens and adds the
+        // summary line, so the card is still growing until it lands. Measuring
+        // before then compares a stale height against the exported PNG.
+        await page.locator(".results-summary").waitFor();
         const capture = await page.locator(".daily-results-card").evaluate((e) => ({
           width: e.getBoundingClientRect().width,
           height: e.getBoundingClientRect().height,

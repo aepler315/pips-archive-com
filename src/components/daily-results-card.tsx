@@ -1,6 +1,10 @@
 import type { DayAnalysis } from "../lib/pips/puzzle-analysis";
 import React from "react";
-import { winningFact } from "../lib/pips/stapipstics-solutions";
+import {
+  solutionSummary,
+  winningFact,
+  WAYS_TO_FINISH_LABEL,
+} from "../lib/pips/stapipstics-solutions";
 import { LEVELS } from "../lib/pips/engine";
 import {
   formatResultDate,
@@ -30,11 +34,12 @@ export function DailyResultsCard({
     id: "solutions",
     family: "curiosity" as const,
     group: "solutions" as const,
-    label: "Winning arrangements",
+    label: WAYS_TO_FINISH_LABEL,
     value: "Unavailable",
     explanation: "",
   };
   const rows = [winning, ...facts];
+  const summaryLine = solutionSummary(summary, analysis);
   return (
     <article className="daily-results-card" aria-label="Daily puzzle results">
       <header className="results-card-header">
@@ -81,6 +86,7 @@ export function DailyResultsCard({
             </div>
           ))}
         </dl>
+        {summaryLine ? <p className="results-summary">{summaryLine}</p> : null}
       </section>
       <footer className="results-card-brand">pipsarchive.com</footer>
     </article>
