@@ -1,0 +1,86 @@
+name: Analyze puzzle arrangements
+
+on:
+  workflow_run:
+    workflows: ["Fetch today's puzzle"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      from: { description: 'start date YYYY-MM-DD (optional)', required: false }
+      to: { description: 'end date YYYY-MM-DD (optional)', required: false }
+      retry_bounded: { description: 'retry bounded analyses', type: boolean, default: false }
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/analyze-puzzles.mjs'
+      - 'src/lib/pips/solution-count.ts'
+      - 'src/lib/pips/solution-space.ts'
+      - 'src/lib/pips/puzzle-content.ts'
+      - 'src/lib/pips/puzzle-complexity.ts'
+      - 'data/analysis/reference-v1.json'
+      - '.github/workflows/analyze-puzzles.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: puzzle-analysis
+  cancel-in-progress: false
+
+jobs:
+  analyze:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: 'npm' }
+      - run: npm ci
+      - name: Analyze at most three current sidecars
+        env:
+          FROM_DATE: ${{ inputs.from }}
+          TO_DATE: ${{ inputs.to }}
+          RETRY_BOUNDED: ${{ inputs.retry_bounded }}
+        run: |
+          args=(--max-dates 3)
+          if [ "${{ github.event_name }}" = workflow_dispatch ]; then args=(--max-dates 30); fi
+          if [ -n "$FROM_DATE" ]; then args+=(--from "$FROM_DATE"); fi
+          if [ -n "$TO_DATE" ]; then args+=(--to "$TO_DATE"); fi
+          if [ "$RETRY_BOUNDED" = 'true' ]; then args+=(--retry-bounded); fi
+          npm run analyze -- "${args[@]}"
+      - run: npm test
+      - name: Commit improved analysis
+        id: commit
+        run: |
+          git config user.name 'pipsarchive-bot'
+          git config user.email 'bot@pipsarchive.com'
+          git add data/analysis
+          if git diff --cached --quiet; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git commit -m "puzzle analysis $(date -u +%F)"
+          for attempt in 1 2 3; do
+            git pull --rebase origin main && git push origin HEAD:main && break
+            if [ "$attempt" = 3 ]; then exit 1; fi
+          done
+          echo 'changed=true' >> "$GITHUB_OUTPUT"
+  deploy:
+    needs: analyze
+    if: needs.analyze.outputs.changed == 'true'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/deploy.yml

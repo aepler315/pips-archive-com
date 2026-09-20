@@ -9,3 +9,6 @@ public/data/
 
 # Local review evidence
 .superpowers/
+
+# Browser verification screenshots
+/test-artifacts/

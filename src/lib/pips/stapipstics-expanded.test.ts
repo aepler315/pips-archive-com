@@ -46,8 +46,8 @@ const facts = (history: Parameters<typeof evaluateStapipstics>[2] = []) =>
   new Map(evaluateStapipstics(summary, raw, history).map((e) => [e.id, e]));
 test("expanded catalog includes all 22 options with auditable eligibility", () => {
   const evaluations = evaluateStapipstics(summary, raw);
-  assert.equal(evaluations.length, 37);
-  assert.equal(new Set(evaluations.map((e) => e.id)).size, 37);
+  assert.equal(evaluations.length, 38);
+  assert.equal(new Set(evaluations.map((e) => e.id)).size, 38);
   assert.equal(evaluations.filter((e) => e.selected).length, 3);
   for (const e of evaluations) assert.ok(Number.isFinite(e.score));
 });

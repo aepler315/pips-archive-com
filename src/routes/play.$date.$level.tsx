@@ -1,3 +1,4 @@
+import { hashPuzzle } from "@/lib/pips/puzzle-content";
 import { useDailyResults } from "@/lib/pips/use-daily-results";
 import { DailyResultsDialog } from "@/components/daily-results-dialog";
 import {
@@ -284,6 +285,19 @@ function SelectedDominoControls({
 
 function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay }) {
   const puzzle = useMemo(() => parsePuzzle(raw[level]), [raw, level]);
+  const contentHash = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    let active = true;
+    contentHash.current = undefined;
+    void hashPuzzle(raw[level])
+      .then((hash) => {
+        if (active) contentHash.current = hash;
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [raw, level]);
   const archive = useArchiveIndex();
   const dateLabel = useMemo(
     () =>
@@ -533,7 +547,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     if (!frozen || writeBusy.current) return;
     writeBusy.current = true;
     setSaveBusy(true);
-    const res = await recordSolve(date, level, frozen.ms);
+    const res = await recordSolve(date, level, frozen.ms, contentHash.current);
     writeBusy.current = false;
     if (!alive.current || frozen.generation !== generation.current) return;
     setSaveBusy(false);

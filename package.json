@@ -18,8 +18,10 @@
     "lint": "eslint .",
     "fetch": "node scripts/fetch.mjs",
     "backfill": "node scripts/fetch.mjs --all",
+    "analyze": "node --import tsx scripts/analyze-puzzles.mjs",
     "index": "node scripts/build-index.mjs",
-    "test:browser": "node --test test/browser/*.test.mjs"
+    "test:browser": "node --test test/browser/*.test.mjs",
+    "analyze:benchmark": "node --import tsx scripts/benchmark-analysis.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.7.0",

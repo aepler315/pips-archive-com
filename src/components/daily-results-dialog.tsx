@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from "react";
+import { loadDayAnalysis, type DayAnalysis } from "@/lib/pips/puzzle-analysis";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, Copy } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
@@ -26,14 +27,26 @@ export function DailyResultsDialog({
   restoreFocus: () => void;
 }) {
   const history = useAllResults();
+  const [analysis, setAnalysis] = useState<DayAnalysis>({});
+  useEffect(() => {
+    let active = true;
+    void loadDayAnalysis(raw).then((a) => {
+      if (active) setAnalysis(a);
+    });
+    return () => {
+      active = false;
+    };
+  }, [raw]);
   const metrics = useMemo(
     () => buildPersistentMetrics(summary, history.results),
     [summary, history.results],
   );
   const facts = useMemo(
-    () => getStapipstics(summary, raw, history.results),
-    [summary, raw, history.results],
+    () => getStapipstics(summary, raw, history.results, analysis),
+    [summary, raw, history.results, analysis],
   );
+  const display = { summary, facts, metrics, analysis };
+  const [capture, setCapture] = useState<typeof display | null>(null);
   const text = summary.complete ? buildDailyShareText(summary) : "";
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
@@ -54,7 +67,9 @@ export function DailyResultsDialog({
   async function download() {
     if (exporting.current || !visibleCard.current) return;
     exporting.current = true;
+    setCapture(display);
     setImageStatus("busy");
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     try {
       const node = visibleCard.current.firstElementChild as HTMLElement;
       await downloadResultsPng(node, summary.date);
@@ -63,6 +78,7 @@ export function DailyResultsDialog({
       setImageStatus("error");
     } finally {
       exporting.current = false;
+      setCapture(null);
     }
   }
   return (
@@ -98,7 +114,7 @@ export function DailyResultsDialog({
           </div>
         ) : null}
         <div className="results-scroll" ref={visibleCard}>
-          <DailyResultsCard summary={summary} facts={facts} metrics={metrics} />
+          <DailyResultsCard {...(capture ?? display)} />
         </div>
         <div className="results-actions">
           <div className="results-action-buttons">
