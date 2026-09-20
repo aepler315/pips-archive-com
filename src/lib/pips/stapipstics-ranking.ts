@@ -1,3 +1,5 @@
+import type { DayAnalysis } from "./puzzle-analysis";
+import { winningFact } from "./stapipstics-solutions";
 import { LEVELS, type RawDay } from "./engine";
 import { buildDailyResults, type DayResults } from "./daily-results";
 import { getStapipsticCandidates, type Stapipstic } from "./stapipstics-candidates";
@@ -12,8 +14,14 @@ export type Evaluation = {
   fact: Stapipstic | null;
   score: number;
   selected: boolean;
+  pinned?: boolean;
   reason:
-    "insufficient-data" | "already-shown" | "selected" | "overlapping-subject" | "lower-ranked";
+    | "pinned"
+    | "insufficient-data"
+    | "already-shown"
+    | "selected"
+    | "overlapping-subject"
+    | "lower-ranked";
 };
 // Editorial salience, not population percentiles. Scores reward concentration,
 // extremes, and rule variety. The fixed catalog order breaks exact ties.
@@ -21,6 +29,7 @@ export function evaluateStapipstics(
   input: DayResults,
   raw: RawDay,
   history: ResultHistory = [],
+  analysis: DayAnalysis = {},
 ): Evaluation[] {
   const summary = buildDailyResults(input.date, input.records);
   const candidates = new Map(getStapipsticCandidates(summary, raw).map((f) => [f.id, f]));
@@ -80,13 +89,24 @@ export function evaluateStapipstics(
       reason: extra.fact ? "lower-ranked" : "insufficient-data",
     });
   }
+  const solutions = winningFact(summary, analysis);
+  evaluations.push({
+    id: "solutions",
+    fact: solutions,
+    score: 0,
+    selected: false,
+    pinned: !!solutions,
+    reason: solutions ? "lower-ranked" : "insufficient-data",
+  });
   const groups = new Set<Stapipstic["group"]>();
-  for (const evaluation of [...evaluations].sort((a, b) => b.score - a.score)) {
+  for (const evaluation of [...evaluations].sort(
+    (a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.score - a.score,
+  )) {
     if (!evaluation.fact || evaluation.reason === "already-shown") continue;
     if (groups.has(evaluation.fact.group)) evaluation.reason = "overlapping-subject";
     else if (groups.size < 3) {
       evaluation.selected = true;
-      evaluation.reason = "selected";
+      evaluation.reason = evaluation.pinned ? "pinned" : "selected";
       groups.add(evaluation.fact.group);
     }
   }
@@ -96,9 +116,10 @@ export function getStapipstics(
   summary: DayResults,
   raw: RawDay,
   history: ResultHistory = [],
+  analysis: DayAnalysis = {},
 ): Stapipstic[] {
-  return evaluateStapipstics(summary, raw, history)
+  return evaluateStapipstics(summary, raw, history, analysis)
     .filter((e) => e.selected)
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.score - a.score)
     .map((e) => e.fact!);
 }

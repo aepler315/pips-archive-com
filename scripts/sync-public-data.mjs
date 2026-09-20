@@ -8,6 +8,8 @@ import { ROOT, PUZZLE_DIR, INDEX_PATH } from './lib.mjs';
 
 const OUT_DIR = join(ROOT, 'public', 'data');
 const OUT_PUZZLES = join(OUT_DIR, 'puzzles');
+const ANALYSIS_DIR = join(ROOT, 'data', 'analysis');
+const OUT_ANALYSIS = join(OUT_DIR, 'analysis');
 
 rmSync(OUT_DIR, { recursive: true, force: true });
 mkdirSync(OUT_PUZZLES, { recursive: true });
@@ -19,5 +21,11 @@ for (const f of readdirSync(PUZZLE_DIR)) {
   n++;
 }
 if (existsSync(INDEX_PATH)) copyFileSync(INDEX_PATH, join(OUT_DIR, 'index.json'));
+if (existsSync(ANALYSIS_DIR)) {
+  mkdirSync(OUT_ANALYSIS, { recursive: true });
+  for (const f of readdirSync(ANALYSIS_DIR)) {
+    if (/^(?:index|\d{4}-\d{2}-\d{2})\.json$/.test(f)) copyFileSync(join(ANALYSIS_DIR, f), join(OUT_ANALYSIS, f));
+  }
+}
 
 console.log(`synced ${n} puzzle files into public/data`);

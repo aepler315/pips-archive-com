@@ -1,3 +1,9 @@
+import {
+  ANALYTICS_KEY,
+  readAnalytics,
+  saveAnalyticsUnderLock,
+  importAnalyticsUnderLock,
+} from "./performance-store";
 import { formatResultDuration } from "./daily-results";
 import { LEVELS, adjacent, key, type GameState, type Level, type Puzzle } from "./engine";
 
@@ -88,7 +94,7 @@ export type SolveWrite =
     };
 
 const listeners = new Set<() => void>();
-function notifyResults() {
+export function notifyResults() {
   for (const listener of listeners) {
     // A UI subscriber must never turn a committed save into a failed outcome.
     try {
@@ -101,7 +107,8 @@ function notifyResults() {
 export function subscribeResults(listener: () => void): () => void {
   listeners.add(listener);
   const changed = (event: StorageEvent) => {
-    if (event.key === null || event.key.startsWith(`${P}result:`)) listener();
+    if (event.key === null || event.key.startsWith(`${P}result:`) || event.key === ANALYTICS_KEY)
+      listener();
   };
   if (typeof window !== "undefined") window.addEventListener?.("storage", changed);
   return () => {
@@ -110,7 +117,7 @@ export function subscribeResults(listener: () => void): () => void {
   };
 }
 
-async function withResultLock<T>(run: () => T): Promise<T> {
+export async function withResultLock<T>(run: () => T): Promise<T> {
   if (typeof navigator === "undefined" || !navigator.locks?.request)
     throw new Error("Safe result saving requires Web Locks");
   return navigator.locks.request("pips-archive:results", run);
@@ -136,7 +143,12 @@ function inspectResult(
   }
 }
 
-export async function recordSolve(date: string, level: Level, ms: number): Promise<SolveWrite> {
+export async function recordSolve(
+  date: string,
+  level: Level,
+  ms: number,
+  puzzleHash?: string,
+): Promise<SolveWrite> {
   const failed = (reason: "storage" | "invalid" | "corrupt" | "locking"): SolveWrite => ({
     status: "failed",
     result: null,
@@ -160,6 +172,10 @@ export async function recordSolve(date: string, level: Level, ms: number): Promi
       const result: Result = { first: ms, best: ms, solvedAt: now, lastAt: now, plays: 1 };
       if (!write(resultKey(date, level), result)) return failed("storage");
       clearProgress(date, level);
+      saveAnalyticsUnderLock(
+        allResults(),
+        puzzleHash ? { date, level, first: ms, solvedAt: now, puzzleHash } : undefined,
+      );
       notifyResults();
       return { status: "created", result, completedDay };
     });
@@ -187,9 +203,14 @@ export function exportAll() {
   const data: Record<string, unknown> = {};
   for (let i = 0; i < s.length; i++) {
     const k = s.key(i);
-    if (k?.startsWith(P)) data[k] = read(k);
+    if (k?.startsWith(P) && k !== ANALYTICS_KEY) data[k] = read(k);
   }
-  return JSON.stringify({ version: 1, exported: new Date().toISOString(), data }, null, 1);
+  const analytics = readAnalytics(allResults());
+  return JSON.stringify(
+    { version: 1, exported: new Date().toISOString(), data, ...(analytics ? { analytics } : {}) },
+    null,
+    1,
+  );
 }
 
 function storageKeys(s: Storage): string[] {
@@ -271,6 +292,7 @@ function isValidProgress(v: unknown): v is Progress {
 }
 
 export type ImportReport = {
+  analytics?: "imported" | "kept" | "rejected" | "failed";
   imported: number;
   progress: number;
   unchanged: number;
@@ -278,7 +300,11 @@ export type ImportReport = {
   failed: number;
 };
 export async function importAll(text: string): Promise<ImportReport> {
-  const obj = JSON.parse(text) as { version?: number; data?: Record<string, unknown> };
+  const obj = JSON.parse(text) as {
+    version?: number;
+    data?: Record<string, unknown>;
+    analytics?: unknown;
+  };
   if (obj?.version !== 1 || !obj.data || typeof obj.data !== "object" || Array.isArray(obj.data))
     throw new Error("Not a Pips Archive export");
   const entries = Object.entries(obj.data);
@@ -320,7 +346,9 @@ export async function importAll(text: string): Promise<ImportReport> {
       if (write(k, result)) report.imported++;
       else report.failed++;
     }
-    if (report.imported) notifyResults();
+    if (obj.analytics !== undefined)
+      report.analytics = importAnalyticsUnderLock(obj.analytics, allResults());
+    if (report.imported || report.analytics === "imported") notifyResults();
     return report;
   });
 }

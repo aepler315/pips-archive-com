@@ -1,3 +1,4 @@
+import type { DayAnalysis } from "../lib/pips/puzzle-analysis";
 import React from "react";
 import { LEVELS } from "../lib/pips/engine";
 import { formatResultDate, formatResultDuration, type DayResults } from "../lib/pips/daily-results";
@@ -8,10 +9,12 @@ import { buildPersistentMetrics, type PersistentMetrics } from "../lib/pips/resu
 export function DailyResultsCard({
   summary,
   facts,
+  analysis = {},
   metrics = buildPersistentMetrics(summary, []),
 }: {
   summary: DayResults;
   facts: Stapipstic[];
+  analysis?: DayAnalysis;
   metrics?: PersistentMetrics;
 }) {
   return (
@@ -92,6 +95,32 @@ export function DailyResultsCard({
             ))}
           </dl>
         </section>
+      ) : null}
+      {!facts.some((f) => f.id === "solutions") ? (
+        <p className="text-sm text-muted-foreground" role="status">
+          Winning-arrangement analysis unavailable
+        </p>
+      ) : null}
+      {LEVELS.some((l) => summary.records[l] && analysis[l]?.structural) ? (
+        <details className="mt-3 text-sm">
+          <summary>Structural challenge — experimental</summary>
+          <p>Solver work, not measured human difficulty. Separate from personal performance.</p>
+          {LEVELS.map((l) => {
+            const a = analysis[l];
+            const s = a?.structural;
+            return summary.records[l] && s ? (
+              <p key={l}>
+                <span className="capitalize">{l}</span>:{" "}
+                {s.status === "complete"
+                  ? `${s.medianFirstSolutionNodes} median first-solution nodes across eight traces`
+                  : "Analysis incomplete"}
+                {s.percentile !== null
+                  ? ` · ${s.percentile.toFixed(1)} / 100 (${s.referenceVersion}; 90/90 reference puzzles)`
+                  : " · Reference score unavailable"}
+              </p>
+            ) : null;
+          })}
+        </details>
       ) : null}
       <footer className="results-card-brand">pipsarchive.com</footer>
     </article>

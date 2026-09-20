@@ -1,3 +1,4 @@
+import { PerformancePanel } from "@/components/performance-panel";
 import { useAllResults } from "@/lib/pips/use-daily-results";
 import { useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -97,6 +98,7 @@ function StatsPage() {
         </tbody>
       </table>
 
+      <PerformancePanel records={res} />
       <h2 className="font-display mt-8 text-xl font-semibold">Recent</h2>
       <table className="mt-2 w-full border-collapse tabular-nums">
         <thead>
@@ -196,11 +198,16 @@ function StatsPage() {
             const f = e.target.files?.[0];
             if (!f) return;
             try {
-              const { imported, progress, unchanged, skipped, failed } = await importAll(
+              const { imported, progress, unchanged, skipped, failed, analytics } = await importAll(
                 await f.text(),
               );
               const text =
                 `Imported ${imported} result${imported === 1 ? "" : "s"}.` +
+                (analytics === "rejected"
+                  ? " Analytics baseline rejected: it does not match the effective first-solve records."
+                  : analytics === "failed"
+                    ? " Analytics could not be saved."
+                    : "") +
                 (unchanged ? ` Kept ${unchanged} existing results unchanged.` : "") +
                 (progress
                   ? ` Restored ${progress} unfinished board${progress === 1 ? "" : "s"}.`

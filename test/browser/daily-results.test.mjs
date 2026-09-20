@@ -480,3 +480,90 @@ for (const engine of engines) {
     },
   );
 }
+
+for (const engine of engines) {
+  test(`${engine}: analysis and performance snapshots at 320px`, { timeout: 60000 }, async (t) => {
+    const browser = await launch(engine);
+    t.after(() => browser.close());
+    const context = await browser.newContext({
+      viewport: { width: 320, height: 740 },
+      reducedMotion: "reduce",
+    });
+    t.after(() => context.close());
+    const page = await context.newPage();
+    await seed(page, { easy: record(), medium: record(), hard: record() });
+    await play(page);
+    await openResults(page);
+    await page.getByText("Winning arrangements", { exact: true }).waitFor();
+    assert.match(await page.locator(".results-facts").innerText(), /Easy: 3 · Medium: 1 · Hard: 2/);
+    assert.equal(await page.locator(".results-fact").count(), 3);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await mkdir("test-artifacts", { recursive: true });
+    await page.screenshot({ path: `test-artifacts/${engine}-exact-analysis.png` });
+    await page.keyboard.press("Escape");
+    await page.route("**/data/analysis/*.json", async (route) => {
+      const sidecar = JSON.parse(
+        await readFile(new URL("../../data/analysis/2026-09-19.json", import.meta.url), "utf8"),
+      );
+      sidecar.analyses.easy.winning = { status: "bounded", lowerBound: "1", reason: "node-budget" };
+      sidecar.analyses.easy.constraintInformationBits = null;
+      await route.fulfill({ json: sidecar });
+    });
+    await seed(page, { easy: record() });
+    await play(page);
+    await openResults(page);
+    await page.getByText(/At least 1 — count incomplete/).waitFor();
+    assert.doesNotMatch(await page.locator(".results-facts").innerText(), /Medium: 1|Hard: 2/);
+    await page.screenshot({ path: `test-artifacts/${engine}-incomplete-analysis.png` });
+    await page.keyboard.press("Escape");
+    await page.unroute("**/data/analysis/*.json");
+    await page.route("**/data/analysis/*.json", (route) => route.fulfill({ status: 404 }));
+    await play(page);
+    await openResults(page);
+    await page.getByText("Winning-arrangement analysis unavailable").waitFor();
+    assert.equal(await page.locator(".results-fact").count(), 3);
+    await page.keyboard.press("Escape");
+    await page.goto(`${base}/stats`);
+    await page.getByRole("region", { name: "Personal performance" }).waitFor();
+    await page.getByText("1 / 10 calibration solves").waitFor();
+    await page.screenshot({ path: `test-artifacts/${engine}-calibration.png` });
+    const data = {};
+    for (let i = 1; i <= 20; i++)
+      for (const level of ["easy", "medium", "hard"]) {
+        const solvedAt = new Date(Date.UTC(2026, 0, i)).toISOString();
+        data[key(level, `2020-01-${String(i).padStart(2, "0")}`)] = {
+          first: i <= 10 ? 120000 : 60000,
+          best: i <= 10 ? 120000 : 60000,
+          plays: 1,
+          solvedAt,
+          lastAt: solvedAt,
+        };
+      }
+    await storeCall(page, "eraseAll", []);
+    await storeCall(page, "importAll", [JSON.stringify({ version: 1, data })]);
+    await page.reload();
+    await page.getByText("200.0 current form", { exact: true }).waitFor();
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await page.screenshot({ path: `test-artifacts/${engine}-performance.png` });
+    const other = await context.newPage();
+    await other.goto(`${base}/stats`);
+    const backup = await storeCall(page, "exportAll", []);
+    const before = JSON.parse(backup).analytics.baseline;
+    await Promise.all([
+      storeCall(page, "importAll", [backup]),
+      storeCall(other, "recordSolve", ["2020-01-01", "easy", 1]),
+    ]);
+    assert.deepEqual(
+      JSON.parse(await storeCall(other, "exportAll", [])).analytics.baseline,
+      before,
+    );
+    await Promise.all([
+      storeCall(page, "eraseAll", []),
+      storeCall(other, "recordSolve", ["2020-01-21", "easy", 1000]),
+    ]);
+    assert.equal(
+      await page.evaluate(() => localStorage.getItem("pips-archive:v1:analytics")),
+      null,
+    );
+  });
+}

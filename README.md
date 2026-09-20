@@ -120,3 +120,65 @@ The expanded pool adds personal baselines, podium finishes, clean sweeps, seven-
 Historical candidates use valid, unique first solves on puzzle dates strictly before the displayed date. Against your usual, Personal podium, and Clean sweep require at least five prior results per relevant difficulty; Moving average compares the latest seven prior results with the seven before them. Rank ties are explicit. Zero baselines cannot produce percentage comparisons. Historical facts show their sample sizes; permanent panel averages still include all saved dates.
 
 Editorial eligibility thresholds keep routine outcomes from displacing useful facts: Photo finish means at most five seconds or 5% apart; Steady hands means a spread no greater than 20% of the slowest time; time ratios start at 2×; Same pieces, different story needs at least 50% shared distinct pairs (intersection/union) and a time gap of at least 20% of the slower result. Exact ties, reversals, personal milestones, and large baseline changes score above routine counts. No random reroll or population-performance claim is involved.
+
+### Winning arrangements and personal performance
+
+The daily recap reserves one Stapipstic for verified winning-arrangement counts.
+Identical tile swaps and double flips are ignored; different domino boundaries and
+fixed-board rotations/reflections count separately. Unfinished counts say “At least
+N — count incomplete.” Missing, stale or invalid metadata never blocks a solve or
+sharing, and unsolved levels' counts stay hidden. PNG exports freeze the displayed
+snapshot; clipboard sharing retains the existing four-line format.
+
+Analysis runs offline; the browser downloads small sidecars and never enumerates
+solutions. Sidecars are hash- and version-checked. Exact zero archive counts are
+quarantined rather than displayed. The independent analysis workflow uses trusted
+main code, a separate concurrency group, bounded batches, non-forced rebased writes,
+and explicit reusable deployment of current main. Puzzle fetching remains independent.
+
+```sh
+npm run analyze -- --from 2026-09-19 --to 2026-09-19
+npm run analyze -- --max-dates 30
+npm run analyze -- --from 2026-09-19 --node-budget 2000000 --memo-entry-budget 250000 --deadline-ms 30000 --retry-bounded
+npm run analyze:benchmark
+```
+
+Automatic analysis uses at most three stale/missing dates; manual workflow dispatch
+uses at most 30. Default per-search limits are 50,000 nodes, 25,000 memo entries,
+and a 3-second safety deadline. Repeating the same policy skips incomplete attempts;
+explicit retries or changed policies can reattempt them without adding overlapping
+bounds or weakening a previous result. Outputs are atomic and unchanged sidecars
+are not rewritten. The compact index contains hashes and structural features for
+bulk historical lookup.
+
+Expandable “Structural challenge — experimental” uses eight independently seeded,
+empty-board first-solution traces, not full-enumeration work. The frozen 90-puzzle
+`archive-90-v1` reference covers 30 puzzles per level across the archive. Its percentile
+is a solver-work comparison, not measured human difficulty. The benchmark reuses this
+manifest; replacing its membership, content, or solver policy requires a new explicitly
+versioned reference. See `data/analysis/benchmark-v1.json` for measured coverage,
+runtime, memory, per-puzzle outcomes and worst cases.
+
+The Stats page's “Difficulty-band adjusted” performance model freezes the first ten
+positive first-completion durations per level as a geometric-mean baseline. Baseline
+100 is the original pace; 125 means 20% less time. Calibration solves are excluded
+from subsequent windows. Current form gives each level equal weight across its latest
+10 eligible post-baseline solves; at least three per level are required, and fewer
+than ten per level is provisional. Window dates and the chart use actual completion
+timestamps, including archived puzzles completed today. Replays never alter results.
+
+Baselines and optional solve-time puzzle hashes stay in browser storage, share the
+result lock, and roundtrip in an optional `analytics` block in version-1 backups.
+Legacy backups remain supported. Existing anchors win on import. Invalid analytics
+are explicitly rejected while results survive; calibration pauses rather than silently
+replacing a rejected baseline. Import a matching analytics backup to recover, or use
+the existing confirmed erase action to remove all data. Storage failures never undo
+a successful first-time save.
+
+`performance-calibration.ts` provides an optional local evaluation harness, not an
+activated personalized difficulty model. It requires 120 eligible hash-matched solves,
+30 per level, chronological training and untouched holdout (at least 30, eight per
+level), training-only normalization, at least 10% lower holdout log-time error and no
+level more than 10% worse. Even a passing experiment requires a review of learning
+versus puzzle-selection confounding. It never writes coefficients or switches the
+active `level-anchor-v1` model automatically.
