@@ -127,14 +127,22 @@
   z-index: 2;
   background: #fffdf8;
 }
+/* Keep the title out of the close control without changing card height.
+   PNG export clones the card outside this dialog and must match on-screen height. */
+.daily-results-dialog .results-scroll {
+  padding-top: 28px;
+}
+.daily-results-dialog .results-card-header {
+  padding: 0 36px;
+}
 .results-scroll {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 .daily-results-card {
-  --results-card-padding: 24px;
-  padding: 28px var(--results-card-padding) var(--results-card-padding);
+  --results-card-padding: 20px;
+  padding: 20px var(--results-card-padding) 14px;
   color: #1c1917;
   background: #fffdf8;
   border-radius: 22px;
@@ -155,24 +163,24 @@
   text-align: center;
 }
 .results-card-header h2 {
-  margin: 20px 0 12px;
-  font: 600 clamp(2rem, 8vw, 2.8rem)/1.04 var(--font-display);
-  letter-spacing: -0.055em;
+  margin: 4px 0 4px;
+  font: 600 clamp(1.65rem, 6.5vw, 2.25rem)/1.06 var(--font-display);
+  letter-spacing: -0.05em;
 }
 .results-card-header h2 em {
   font-weight: 500;
   color: #426546;
 }
 .results-date {
-  margin-bottom: 23px;
+  margin: 0 0 12px;
   color: #696252;
-  font-size: 0.85rem;
+  font-size: 0.78rem;
   font-variant-numeric: tabular-nums;
 }
 .results-scores {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 .results-score {
   display: flex;
@@ -181,10 +189,10 @@
   min-width: 0;
   background: #f3eedf;
   border: 1px solid #e5dccb;
-  border-radius: 12px;
+  border-radius: 10px;
   overflow-wrap: anywhere;
   text-align: center;
-  padding: 12px 5px 9px;
+  padding: 8px 4px 6px;
 }
 .results-score-medium {
   background: #ececda;
@@ -196,20 +204,36 @@
 }
 .results-score-label {
   font-weight: 600;
-  font-size: 0.8rem;
+  font-size: 0.72rem;
 }
 .results-score strong {
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: clamp(1.2rem, 6vw, 1.95rem);
-  line-height: 1.3;
+  font-size: clamp(1.15rem, 5.4vw, 1.7rem);
+  line-height: 1.15;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.045em;
-  padding: 9px 0;
+  padding: 3px 0 2px;
+}
+.results-score-metrics {
+  display: grid;
+  gap: 1px;
+  margin-top: 4px;
+  padding-top: 4px;
+  width: 100%;
+  border-top: 1px solid #ddd4c4;
+  font-size: 0.62rem;
+  line-height: 1.25;
+  color: #6b6458;
+}
+.results-score-metrics small {
+  font-size: 0.58rem;
+  color: #7a7366;
 }
 .results-score-status {
   border-top: 1px solid #c7c3b166;
-  padding-top: 7px;
+  padding-top: 5px;
+  margin-top: 4px;
   width: 100%;
   color: #575a48;
   font-size: 0.65rem;
@@ -219,7 +243,7 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 4px 12px;
-  padding: 13px 2px 17px;
+  padding: 10px 2px 8px;
   font-size: 0.8rem;
   color: #696252;
 }
@@ -230,39 +254,71 @@
 .results-facts,
 .results-winning {
   border-top: 1px solid #dfd7c8;
-  padding-top: 16px;
+  padding-top: 8px;
+  margin: 0;
 }
 .results-facts h3,
 .results-winning h3 {
-  font: 600 1.3rem var(--font-display);
-  letter-spacing: -0.025em;
-  display: flex;
-  justify-content: space-between;
+  font: 600 0.72rem/1.2 var(--font-sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b6458;
+  margin: 0 0 4px;
 }
 .results-facts-intro {
   color: #78716c;
   font-size: 0.75rem;
-  margin: 2px 0 12px;
+  margin: 2px 0 8px;
+}
+.results-winning-count {
+  padding: 0 0 2px;
+  font-variant-numeric: tabular-nums;
+}
+.results-winning-count p {
+  margin: 0;
+}
+.results-winning-count p + p {
+  margin-top: 2px;
+}
+.results-winning-count .text-sm,
+.results-winning > .text-sm {
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+.results-facts dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
 }
 .results-fact {
-  padding: 10px 0;
-  border-top: 1px solid #ece5d9;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 10px;
+  row-gap: 1px;
+  align-items: baseline;
+  padding: 0;
+  border: 0;
 }
 .results-fact dt {
-  font-size: 0.8rem;
+  font-size: 0.7rem;
   font-weight: 600;
+  color: #44403c;
+}
+.results-fact dd {
+  display: contents;
 }
 .results-fact dd strong {
   display: block;
-  font-size: 1rem;
-  line-height: 1.35;
+  font-size: 0.92rem;
+  line-height: 1.25;
   font-variant-numeric: tabular-nums;
-  margin: 2px 0;
+  text-align: right;
 }
 .results-fact dd span {
   display: block;
-  font-size: 0.73rem;
-  line-height: 1.4;
+  grid-column: 1 / -1;
+  font-size: 0.68rem;
+  line-height: 1.3;
   color: #696252;
 }
 .results-card-brand {
@@ -272,14 +328,14 @@
   gap: 4px 8px;
   border-top: 1px solid #dfd7c8;
   margin-top: 6px;
-  padding-top: 12px;
+  padding-top: 8px;
   color: #696252;
   font-size: 0.65rem;
   font-weight: 600;
 }
 .results-actions {
   flex-shrink: 0;
-  padding: 12px 18px;
+  padding: 10px 16px 12px;
   border-top: 1px solid #dfd7c8;
   background: #f5efe4;
   max-height: 48dvh;
@@ -375,10 +431,18 @@
 }
 @media (max-width: 359px) {
   .daily-results-card {
-    --results-card-padding: 16px;
+    --results-card-padding: 14px;
   }
   .results-scores {
-    gap: 5px;
+    gap: 4px;
+  }
+}
+@media (max-height: 700px) {
+  .results-card-header h2 {
+    font-size: clamp(1.45rem, 6vw, 1.9rem);
+  }
+  .results-score-metrics {
+    margin-top: 2px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -389,21 +453,4 @@
   .results-automatic .results-score {
     animation: none;
   }
-}
-
-.results-score-metrics {
-  display: grid;
-  gap: 4px;
-  margin-top: 12px;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--muted-foreground);
-}
-.results-score-metrics small {
-  font-size: 10px;
-}
-
-.results-winning-count {
-  padding: 10px 0 16px;
-  font-variant-numeric: tabular-nums;
 }
