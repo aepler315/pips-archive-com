@@ -133,7 +133,8 @@
   overscroll-behavior: contain;
 }
 .daily-results-card {
-  padding: 28px 24px 18px;
+  --results-card-padding: 24px;
+  padding: 28px var(--results-card-padding) var(--results-card-padding);
   color: #1c1917;
   background: #fffdf8;
   border-radius: 22px;
@@ -374,8 +375,7 @@
 }
 @media (max-width: 359px) {
   .daily-results-card {
-    padding-left: 16px;
-    padding-right: 16px;
+    --results-card-padding: 16px;
   }
   .results-scores {
     gap: 5px;
