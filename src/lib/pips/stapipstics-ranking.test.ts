@@ -35,8 +35,8 @@ test("evaluates every registered fact with result, score, and selection reason",
       [0, 0],
     ]),
   );
-  assert.equal(evaluations.length, 15);
-  assert.equal(new Set(evaluations.map((e) => e.id)).size, 15);
+  assert.equal(evaluations.length, 37);
+  assert.equal(new Set(evaluations.map((e) => e.id)).size, 37);
   assert.ok(evaluations.every((e) => Number.isFinite(e.score) && e.reason.length > 0));
   const hard = evaluations.find((e) => e.id === "hard")!;
   assert.ok(hard.fact);
