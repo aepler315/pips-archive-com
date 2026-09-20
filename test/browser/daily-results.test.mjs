@@ -557,6 +557,21 @@ for (const engine of engines) {
       JSON.parse(await storeCall(other, "exportAll", [])).analytics.baseline,
       before,
     );
+    await storeCall(page, "eraseAll", []);
+    const nine = Object.fromEntries(
+      Object.entries(data).filter(([k]) => k.endsWith(":easy") && Number(k.slice(-7, -5)) <= 9),
+    );
+    await storeCall(page, "importAll", [JSON.stringify({ version: 1, data: nine })]);
+    await Promise.all([
+      storeCall(page, "recordSolve", ["2020-01-10", "easy", 1000]),
+      storeCall(other, "recordSolve", ["2020-01-11", "easy", 2000]),
+    ]);
+    const raced = JSON.parse(await storeCall(page, "exportAll", [])).analytics.baseline;
+    assert.equal(raced.levels.easy.anchor.length, 10);
+    assert.equal(
+      raced.levels.easy.anchor.filter((r) => ["2020-01-10", "2020-01-11"].includes(r.date)).length,
+      1,
+    );
     await Promise.all([
       storeCall(page, "eraseAll", []),
       storeCall(other, "recordSolve", ["2020-01-21", "easy", 1000]),
