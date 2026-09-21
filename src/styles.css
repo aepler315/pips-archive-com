@@ -254,37 +254,39 @@
 }
 .results-facts dl {
   display: grid;
-  gap: 5px;
+  gap: 0;
   margin: 0;
 }
-/* One row per fact: label left, value right. A two-column grid rather than a
-   flex row, so a long value wraps inside its own column and every value still
-   lands on the right edge — mixed wrapping breaks the label-to-value pairing. */
 .results-fact {
-  display: grid;
-  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
-  align-items: baseline;
-  gap: 12px;
-  font-size: 0.74rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 6px 0;
   line-height: 1.35;
+}
+.results-fact + .results-fact {
+  border-top: 1px solid #ece4d5;
 }
 .results-fact dt {
   color: #6b6458;
+  font-size: 0.68rem;
 }
 .results-fact dd {
   margin: 0;
-  text-align: right;
+  text-align: left;
   color: #1c1917;
   font-weight: 600;
+  font-size: 0.86rem;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
 /* One sentence putting the day's board counts in context, under the list. */
 .results-summary {
   margin: 8px 0 0;
-  font-size: 0.7rem;
+  font-size: 0.82rem;
   line-height: 1.4;
-  color: #8a8276;
+  color: #5c564c;
 }
 .results-card-brand {
   display: flex;

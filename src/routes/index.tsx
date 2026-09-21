@@ -8,6 +8,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { LEVELS } from "@/lib/pips/engine";
 import { prefetchDay } from "@/lib/pips/days";
+import { dayClickTarget } from "@/lib/pips/day-click";
 import { resultKeyOf } from "@/lib/pips/random";
 import { groupMonths, monthChip, monthLabel, resolveMonth } from "@/lib/pips/months";
 import { fmt, type Result } from "@/lib/pips/store";
@@ -245,16 +246,14 @@ function DayCell({
     );
   }
   const solvedLevels = LEVELS.filter((l) => results.has(resultKeyOf(entry.date, l)));
-  return (
-    <button
-      type="button"
-      onClick={() => onOpen(entry)}
-      aria-label={`${dayLabel(entry.date)} — ${solvedLevels.length} of ${LEVELS.length} solved`}
-      className={cn(
-        "flex aspect-square flex-col items-center justify-center gap-1 rounded-[var(--radius-sm)] bg-background text-xs font-medium text-foreground shadow-[inset_0_0_0_1px_var(--color-border)] hover:bg-muted sm:text-sm",
-        solvedLevels.length === LEVELS.length && "shadow-[inset_0_0_0_1.5px_var(--color-ok-ink)]",
-      )}
-    >
+  const target = dayClickTarget(entry.date, solvedLevels.length);
+  const className = cn(
+    "flex aspect-square flex-col items-center justify-center gap-1 rounded-[var(--radius-sm)] bg-background text-xs font-medium text-foreground shadow-[inset_0_0_0_1px_var(--color-border)] hover:bg-muted sm:text-sm",
+    solvedLevels.length === LEVELS.length && "shadow-[inset_0_0_0_1.5px_var(--color-ok-ink)]",
+  );
+  const ariaLabel = `${dayLabel(entry.date)} — ${solvedLevels.length} of ${LEVELS.length} solved`;
+  const content = (
+    <>
       <span className="tabular-nums">{day}</span>
       <span className="flex gap-0.5">
         {LEVELS.map((l) => (
@@ -267,6 +266,24 @@ function DayCell({
           />
         ))}
       </span>
+    </>
+  );
+  if (target.kind === "play") {
+    return (
+      <Link
+        to="/play/$date/$level"
+        params={{ date: target.date, level: target.level }}
+        preload="intent"
+        aria-label={ariaLabel}
+        className={cn(className, "no-underline")}
+      >
+        {content}
+      </Link>
+    );
+  }
+  return (
+    <button type="button" onClick={() => onOpen(entry)} aria-label={ariaLabel} className={className}>
+      {content}
     </button>
   );
 }
