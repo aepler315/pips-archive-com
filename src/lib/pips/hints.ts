@@ -217,7 +217,11 @@ export function offerIdFor(
   return `h${HINT_POLICY_VERSION}:${puzzleHash}:${boardFp || "empty"}:${a}-${b}:${target.firstPip}:${target.regionId}:${cells}`;
 }
 
-export function matchingUnusedTiles(puzzle: Puzzle, state: GameState, pips: [number, number]): number[] {
+export function matchingUnusedTiles(
+  puzzle: Puzzle,
+  state: GameState,
+  pips: [number, number],
+): number[] {
   const want = pipsKey(pips);
   return puzzle.dominoes.flatMap((tile, index) =>
     !state[index] && pipsKey(tile) === want ? [index] : [],
@@ -229,16 +233,9 @@ export function orientedPlacement(
   cells: [Cell, Cell],
   firstPip: number,
 ): [Cell, Cell] | null {
-  if (tile[0] === firstPip && tile[1] === (firstPip === cellsPipMate(tile, firstPip))) {
-    return [cells[0], cells[1]];
-  }
   if (tile[0] === firstPip) return [cells[0], cells[1]];
   if (tile[1] === firstPip) return [cells[1], cells[0]];
   return null;
-}
-
-function cellsPipMate(tile: [number, number], firstPip: number): number {
-  return tile[0] === firstPip ? tile[1] : tile[0];
 }
 
 export function placementForOffer(
@@ -265,7 +262,10 @@ export function offerStillApplies(puzzle: Puzzle, state: GameState, offer: HintO
   return placementForOffer(puzzle, state, offer) !== null;
 }
 
-export function chooseHintRegion(puzzle: Puzzle, cells: [Cell, Cell]): {
+export function chooseHintRegion(
+  puzzle: Puzzle,
+  cells: [Cell, Cell],
+): {
   regionId: number;
   regionCells: Cell[];
 } | null {
@@ -275,12 +275,14 @@ export function chooseHintRegion(puzzle: Puzzle, cells: [Cell, Cell]): {
   if (!regions.length) return null;
   const unique = [...new Map(regions.map((region) => [region.id, region])).values()];
   unique.sort((a, b) => {
-    const rank = (region: Puzzle["regions"][number]) =>
-      region.type === "empty" ? 1 : 0;
+    const rank = (region: Puzzle["regions"][number]) => (region.type === "empty" ? 1 : 0);
     return rank(a) - rank(b) || a.cells.length - b.cells.length || a.id - b.id;
   });
   const region = unique[0];
-  return { regionId: region.id, regionCells: region.cells.map((cell) => [cell[0], cell[1]] as Cell) };
+  return {
+    regionId: region.id,
+    regionCells: region.cells.map((cell) => [cell[0], cell[1]] as Cell),
+  };
 }
 
 export function buildTargetMove(
@@ -363,16 +365,12 @@ export function planPurchase(
   };
 }
 
-export function applyReceipt(
-  receipts: HintReceipt[],
-  receipt: HintReceipt,
-): HintReceipt[] | null {
+export function applyReceipt(receipts: HintReceipt[], receipt: HintReceipt): HintReceipt[] | null {
   if (!isValidReceipt(receipt)) return null;
   if (receipts.some((existing) => existing.idempotencyKey === receipt.idempotencyKey)) {
     return receipts.map((existing) => ({ ...existing }));
   }
-  const next = [...receipts, receipt];
-  return normalizeReceipts(next);
+  return normalizeReceipts([...receipts, receipt]);
 }
 
 export function isValidReceipt(value: unknown): value is HintReceipt {
@@ -414,7 +412,10 @@ export function normalizeReceipts(value: unknown): HintReceipt[] | null {
   }
   const chargedByOffer = new Map<string, number>();
   for (const receipt of receipts) {
-    chargedByOffer.set(receipt.offerId, (chargedByOffer.get(receipt.offerId) ?? 0) + receipt.chargedMs);
+    chargedByOffer.set(
+      receipt.offerId,
+      (chargedByOffer.get(receipt.offerId) ?? 0) + receipt.chargedMs,
+    );
   }
   for (const [offerId, charged] of chargedByOffer) {
     const top = highest.get(offerId);
@@ -435,12 +436,9 @@ export function normalizeAssistance(value: unknown): AssistanceSnapshot | null {
   if (!Array.isArray(raw.moves) || raw.moves.length !== moves.length) return null;
   for (let i = 0; i < moves.length; i++) {
     const move = raw.moves[i];
-    if (
-      !move ||
-      move.offerId !== moves[i].offerId ||
-      move.highestTier !== moves[i].highestTier
-    )
+    if (!move || move.offerId !== moves[i].offerId || move.highestTier !== moves[i].highestTier) {
       return null;
+    }
   }
   return { policyVersion: HINT_POLICY_VERSION, penaltyMs, receipts, moves };
 }
@@ -492,7 +490,9 @@ export function validateImportedProgressHints(value: {
   if (!Array.isArray(value.offers)) return null;
   const offers: PurchasedOffer[] = [];
   const seen = new Set<string>();
-  const highest = new Map(highestTiersByOffer(receipts).map((move) => [move.offerId, move.highestTier]));
+  const highest = new Map(
+    highestTiersByOffer(receipts).map((move) => [move.offerId, move.highestTier]),
+  );
   for (const item of value.offers) {
     if (!isValidPurchasedOffer(item)) return null;
     if (seen.has(item.id)) return null;
@@ -525,7 +525,9 @@ export function revealedHint(
 }
 
 export function witnessIsCompatible(puzzle: Puzzle, state: GameState, witness: GameState): boolean {
-  if (witness.length !== puzzle.dominoes.length || state.length !== puzzle.dominoes.length) return false;
+  if (witness.length !== puzzle.dominoes.length || state.length !== puzzle.dominoes.length) {
+    return false;
+  }
   if (!evaluate(puzzle, witness).solved) return false;
   const current = occupancy(puzzle, state);
   const complete = occupancy(puzzle, witness);
