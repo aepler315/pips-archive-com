@@ -1,6 +1,6 @@
 import { loadDayAnalysis, type DayAnalysis } from "@/lib/pips/puzzle-analysis";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Download, Copy } from "lucide-react";
+import { Copy, Download, Send, Share2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { DailyResultsCard } from "./daily-results-card";
@@ -8,7 +8,8 @@ import type { DayResults } from "@/lib/pips/daily-results";
 import type { RawDay } from "@/lib/pips/engine";
 import { getStapipstics } from "@/lib/pips/stapipstics";
 import { buildDailyShareText, copyDailyResults } from "@/lib/pips/result-sharing";
-import { downloadResultsPng } from "@/lib/pips/result-image";
+import { renderResultsPng, saveResultsPng } from "@/lib/pips/result-image";
+import { sendToShelfDrop } from "@/lib/pips/shelf-drop";
 
 import { useAllResults } from "@/lib/pips/use-daily-results";
 import { buildPersistentMetrics } from "@/lib/pips/result-metrics";
@@ -48,37 +49,84 @@ export function DailyResultsDialog({
   const display = { summary, facts, metrics, analysis };
   const [capture, setCapture] = useState<typeof display | null>(null);
   const text = summary.complete ? buildDailyShareText(summary) : "";
-  const [copied, setCopied] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [notice, setNotice] = useState("");
   const [copyError, setCopyError] = useState(false);
   const [imageStatus, setImageStatus] = useState<"idle" | "busy" | "ready" | "error">("idle");
   const exporting = useRef(false);
   const visibleCard = useRef<HTMLDivElement>(null);
+  const shareRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      setMenuOpen(false);
+      shareRef.current?.querySelector("button")?.focus();
+    };
+    const onPointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (shareRef.current?.contains(target)) return;
+      setMenuOpen(false);
+    };
+    document.addEventListener("keydown", onKey, true);
+    document.addEventListener("pointerdown", onPointer);
+    return () => {
+      document.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("pointerdown", onPointer);
+    };
+  }, [menuOpen]);
+  async function renderedCard() {
+    if (exporting.current || !visibleCard.current) throw new Error("The results card is not ready");
+    exporting.current = true;
+    setCapture(display);
+    setMenuOpen(false);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    try {
+      const node = visibleCard.current?.firstElementChild as HTMLElement | null;
+      if (!node) throw new Error("The results card is not laid out");
+      return await renderResultsPng(node, summary.date);
+    } finally {
+      exporting.current = false;
+      setCapture(null);
+    }
+  }
   async function copy() {
-    setCopied(false);
+    setMenuOpen(false);
+    setNotice("");
     setCopyError(false);
     try {
       await copyDailyResults(text, navigator.clipboard);
-      setCopied(true);
+      setNotice("Results copied to clipboard.");
     } catch {
       setCopyError(true);
     }
   }
-  async function download() {
-    if (exporting.current || !visibleCard.current) return;
-    exporting.current = true;
-    setCapture(display);
+  async function sendShelf() {
+    setNotice("");
+    setCopyError(false);
     setImageStatus("busy");
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     try {
-      const node = visibleCard.current.firstElementChild as HTMLElement;
-      await downloadResultsPng(node, summary.date);
-      setImageStatus("ready");
+      const blob = await renderedCard();
+      setNotice(await sendToShelfDrop(`pips-${summary.date}.png`, new Uint8Array(await blob.arrayBuffer())));
+      setImageStatus("idle");
     } catch {
       setImageStatus("error");
-    } finally {
-      exporting.current = false;
-      setCapture(null);
+    }
+  }
+  async function download() {
+    setNotice("");
+    setImageStatus("busy");
+    try {
+      const blob = await renderedCard();
+      saveResultsPng(blob, summary.date);
+      setImageStatus("ready");
+      setNotice("PNG ready");
+    } catch {
+      setImageStatus("error");
     }
   }
   return (
@@ -126,20 +174,33 @@ export function DailyResultsDialog({
               <Download size={16} />
               {imageStatus === "busy" ? "Generating…" : "Download PNG"}
             </Button>
-            <Button onClick={() => void copy()} disabled={!summary.complete}>
-              <Copy size={16} />
-              {copied ? "Copied!" : "Copy"}
-            </Button>
+            <div className="results-share" ref={shareRef}>
+              <Button
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                disabled={!summary.complete || imageStatus === "busy"}
+                onClick={() => setMenuOpen((open) => !open)}
+              >
+                <Share2 size={16} />
+                Share
+              </Button>
+              {menuOpen ? (
+                <div className="results-share-menu" role="menu" aria-label="Share results">
+                  <Button variant="ghost" role="menuitem" onClick={() => void copy()}>
+                    <Copy size={16} />
+                    Copy
+                  </Button>
+                  <Button variant="ghost" role="menuitem" onClick={() => void sendShelf()}>
+                    <Send size={16} />
+                    Send to ShelfDrop
+                  </Button>
+                </div>
+              ) : null}
+            </div>
           </div>
-          {!summary.complete ? <p>Finish all three to copy your times.</p> : null}
+          {!summary.complete ? <p>Finish all three to share your times.</p> : null}
           <p role="status" aria-live="polite">
-            {imageStatus === "error"
-              ? "Couldn’t create the PNG. Please try again."
-              : imageStatus === "ready"
-                ? "PNG ready"
-                : copied
-                  ? "Results copied to clipboard."
-                  : ""}
+            {imageStatus === "error" ? "Couldn’t create the PNG. Please try again." : notice}
           </p>
           {copyError ? (
             <div role="alert">

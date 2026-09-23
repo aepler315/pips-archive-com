@@ -129,7 +129,7 @@ for (const engine of engines) {
         await play(page, "easy", "2026-09-18");
         await openResults(page);
         assert.equal(await page.getByText("Not solved", { exact: true }).count(), 2);
-        assert.ok(await page.getByRole("button", { name: "Copy", exact: true }).isDisabled());
+        assert.ok(await page.getByRole("button", { name: "Share", exact: true }).isDisabled());
         assert.match(await page.locator(".results-date").innerText(), /09\/18\/2026/);
         const clock = await page.locator(".tabular-nums").first().innerText();
         await page.waitForTimeout(1100);
@@ -158,8 +158,9 @@ for (const engine of engines) {
           },
         }),
       );
-      await page.getByRole("button", { name: "Copy", exact: true }).click();
-      await page.getByRole("button", { name: "Copied!", exact: true }).waitFor();
+      await page.getByRole("button", { name: "Share", exact: true }).click();
+      await page.getByRole("menuitem", { name: "Copy", exact: true }).click();
+      await page.getByText("Results copied to clipboard.").waitFor();
       const expected = "Pips 09/19/2026\nEasy: 01:02\nMedium: 02:05\nHard: 04:05\npipsarchive.com";
       assert.equal(await page.evaluate(() => window.copiedResults), expected);
       await page.evaluate(() =>
@@ -172,7 +173,8 @@ for (const engine of engines) {
           },
         }),
       );
-      await page.getByRole("button", { name: "Copied!", exact: true }).click();
+      await page.getByRole("button", { name: "Share", exact: true }).click();
+      await page.getByRole("menuitem", { name: "Copy", exact: true }).click();
       const fallback = page.getByRole("textbox", { name: "Results to copy" });
       await fallback.waitFor();
       assert.equal(await fallback.inputValue(), expected);

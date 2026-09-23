@@ -15,7 +15,7 @@ import {
 // there (its client-only work never executes during a prerender pass).
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Lightbulb, RotateCw, TriangleAlert } from "lucide-react";
+import { Lightbulb, RotateCw } from "lucide-react";
 import { HintDialog, type HintView } from "@/components/hint-dialog";
 import { PipsBoard } from "@/components/pips-board";
 import { PlayClock } from "@/components/play-clock";
@@ -42,7 +42,6 @@ import {
   legalNeighbors,
   parsePuzzle,
   place,
-  remainderTileable,
   remove,
   rotatePlaced,
   rotateTab,
@@ -84,6 +83,7 @@ import { loadDay } from "@/lib/pips/days";
 import { boundsOf, puzzleCells } from "@/lib/pips/geometry";
 import { displayedGrid, mobileBoardMaxHeight, mobileBoardOrientation } from "@/lib/pips/layout";
 import { nextPuzzleTarget } from "@/lib/pips/months";
+import { resumeBoard } from "@/lib/pips/resume";
 import { useArchiveIndex } from "@/lib/pips/use-archive";
 
 export const Route = createFileRoute("/play/$date/$level")({
@@ -408,6 +408,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const [clock] = useState(createClock);
   const [saveFailed, setSaveFailed] = useState(false);
   const solvedRef = useRef(false);
+  const hasOpenedResults = useRef(false);
   const stateRef = useRef(state);
   const selRef = useRef<Sel>(null);
   const lastPickup = useRef<{ d: number; keys: Set<string>; t: number } | null>(null);
@@ -448,13 +449,6 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const heldHints = () => ({ receipts: receiptsRef.current, offers: offersRef.current });
 
   const ev = useMemo(() => evaluate(puzzle, state), [puzzle, state]);
-  // The remaining empty cells can only ever be a dead end if no perfect
-  // domino tiling of them exists any more (an odd or isolated leftover) —
-  // catch that early rather than let the player discover it by hand.
-  const stuck = useMemo(
-    () => !ev.solved && state.some(Boolean) && !remainderTileable(puzzle, state),
-    [puzzle, state, ev.solved],
-  );
 
   const nowElapsed = () => clock.read(performance.now());
 
@@ -568,19 +562,32 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, level]);
 
-  useEffect(() => {
-    if (stateRef.current.some(Boolean)) return;
-    const p = getProgress(date, level, puzzle);
-    if (p) {
-      stateRef.current = p.state;
-      setState(p.state);
-      clock.restore(p.elapsed);
-      holdHints(p.receipts ?? [], p.offers ?? []);
+  // Saved and finished boards are applied before paint. Initial state stays
+  // empty so it matches the prerender, which cannot read localStorage.
+  useIsomorphicLayoutEffect(() => {
+    if (stateRef.current.some(Boolean) || solvedRef.current) return;
+    const progress = getProgress(date, level, puzzle);
+    const result = getResult(date, level);
+    const resumed = resumeBoard(puzzle, progress?.state ?? null, result !== null);
+    if (!resumed) return;
+    stateRef.current = resumed.state;
+    setState(resumed.state);
+    if (progress) holdHints(progress.receipts ?? [], progress.offers ?? []);
+    if (resumed.reviewing && result) {
+      solvedRef.current = true;
+      hasOpenedResults.current = true;
+      setSolvedFlag(true);
+      setSolveMs(result.first);
+      setSolvePenaltyMs(result.assistance?.penaltyMs ?? 0);
+      setSolveDetail("");
+      clock.stop(performance.now());
+      clock.restore(result.first);
+      return;
     }
+    if (progress) clock.restore(progress.elapsed);
   }, [date, level, puzzle, clock]);
 
   const solvedBannerRef = useRef<HTMLDivElement>(null);
-  const hasOpenedResults = useRef(false);
   const restoreResultsFocus = useCallback(() => {
     const target =
       (resultsFocusRef.current?.isConnected ? resultsFocusRef.current : null) ??
@@ -698,7 +705,9 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     startClock();
     stateRef.current = next;
     setState(next);
-    if (!solvedRef.current && !evaluate(puzzleRef.current, next).solved)
+    // The placement that finishes the puzzle has to be saved too, or the next
+    // visit opens with every domino back in the bank.
+    if (!solvedRef.current)
       setSaveFailed(!saveProgress(date, level, next, nowElapsed(), heldHints()));
   }
 
@@ -1160,16 +1169,6 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
         <p className="mb-2 text-sm text-muted-foreground">
           Recorded time: {fmt(scoredFirstMs(prior))}. Replays do not change it. Hints are free.
         </p>
-      ) : null}
-
-      {stuck ? (
-        <div
-          role="status"
-          className="mb-3 flex items-center gap-2 rounded-[var(--radius-md)] bg-bad px-4 py-2.5 text-sm text-bad-ink"
-        >
-          <TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
-          Some cells can no longer be covered by any domino from here — try moving one.
-        </div>
       ) : null}
 
       {canTurnToFit && !isMd ? (

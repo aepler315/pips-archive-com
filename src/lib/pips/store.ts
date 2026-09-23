@@ -201,7 +201,6 @@ export async function recordSolve(
       const prev = inspectResult(resultKey(date, level));
       if (prev.kind === "storage" || prev.kind === "corrupt") return failed(prev.kind);
       if (prev.kind === "existing") {
-        clearProgress(date, level);
         return { status: "existing", result: prev.result, completedDay: false };
       }
       const completedDay = LEVELS.filter((l) => l !== level).every(
@@ -210,7 +209,6 @@ export async function recordSolve(
       const result: Result = { first: ms, best: ms, solvedAt: now, lastAt: now, plays: 1 };
       if (assisted?.receipts.length) result.assistance = assisted;
       if (!write(resultKey(date, level), result)) return failed("storage");
-      clearProgress(date, level);
       // Assisted solves never enter the performance model, so they carry no context.
       saveAnalyticsUnderLock(
         allResults(),

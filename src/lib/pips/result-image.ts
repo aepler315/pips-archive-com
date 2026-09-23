@@ -1,7 +1,7 @@
 import { validResultDate } from "./daily-results";
 
 /** Clone the rendered card alone, at the same width but without scroll/animation limits. */
-export async function downloadResultsPng(node: HTMLElement, date: string): Promise<void> {
+export async function renderResultsPng(node: HTMLElement, date: string): Promise<Blob> {
   if (!validResultDate(date)) throw new Error("Invalid puzzle date");
   const width = node.getBoundingClientRect().width;
   if (!width) throw new Error("The results card is not laid out");
@@ -12,8 +12,6 @@ export async function downloadResultsPng(node: HTMLElement, date: string): Promi
   const clone = node.cloneNode(true) as HTMLElement;
   host.appendChild(clone);
   document.body.appendChild(host);
-  let url: string | null = null;
-  let dispatched = false;
   try {
     const { toBlob } = await import("html-to-image");
     await document.fonts.ready;
@@ -26,24 +24,28 @@ export async function downloadResultsPng(node: HTMLElement, date: string): Promi
     });
     if (!blob || blob.type !== "image/png" || blob.size === 0)
       throw new Error("PNG generation failed");
-    url = URL.createObjectURL(blob);
-    const anchor = Object.assign(document.createElement("a"), {
-      href: url,
-      download: `pips-${date}.png`,
-    });
-    document.body.appendChild(anchor);
-    try {
-      anchor.click();
-      dispatched = true;
-    } finally {
-      anchor.remove();
-    }
+    return blob;
   } finally {
     host.remove();
-    if (url) {
-      const release = url;
-      if (dispatched) setTimeout(() => URL.revokeObjectURL(release), 1000);
-      else URL.revokeObjectURL(release);
-    }
+  }
+}
+
+export async function downloadResultsPng(node: HTMLElement, date: string): Promise<void> {
+  const blob = await renderResultsPng(node, date);
+  saveResultsPng(blob, date);
+}
+
+export function saveResultsPng(blob: Blob, date: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = Object.assign(document.createElement("a"), {
+    href: url,
+    download: `pips-${date}.png`,
+  });
+  document.body.appendChild(anchor);
+  try {
+    anchor.click();
+  } finally {
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 }
