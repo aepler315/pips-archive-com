@@ -1,4 +1,5 @@
 import { LEVELS, type Level } from "./engine";
+import { isAssistedSnapshot, type AssistanceSnapshot } from "./hints";
 import type { AnchorRecord, LevelBaseline, PerformanceBaseline } from "./performance-types";
 export const emptyBaseline = (): PerformanceBaseline => ({
   schemaVersion: 1,
@@ -6,8 +7,10 @@ export const emptyBaseline = (): PerformanceBaseline => ({
   levels: {},
 });
 const time = (s: string) => Date.parse(s);
-export const eligible = (r: AnchorRecord) =>
+/** Hint-assisted first solves measure the hints as much as the player, so they never score. */
+export const eligible = (r: AnchorRecord & { assistance?: AssistanceSnapshot | null }) =>
   !!r &&
+  !isAssistedSnapshot(r.assistance) &&
   LEVELS.includes(r.level) &&
   /^\d{4}-\d{2}-\d{2}$/.test(r.date) &&
   Number.isFinite(time(r.date)) &&

@@ -1,3 +1,4 @@
+import { scoredFirstMs } from "./hints";
 import { LEVELS, type Level } from "./engine";
 import type { Result } from "./store";
 
@@ -24,7 +25,7 @@ export function buildDailyResults(date: string, records: Record<Level, Result | 
     ]),
   ) as Record<Level, Result | null>;
   const solvedCount = LEVELS.filter((l) => safe[l] !== null).length;
-  const total = LEVELS.reduce((n, l) => n + (safe[l]?.first ?? 0), 0);
+  const total = LEVELS.reduce((n, l) => n + (safe[l] ? scoredFirstMs(safe[l]) : 0), 0);
   return {
     date,
     records: safe,

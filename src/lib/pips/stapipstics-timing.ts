@@ -1,3 +1,4 @@
+import { scoredFirstMs } from "./hints";
 import { LEVELS } from "./engine";
 import { formatResultDuration as duration, type DayResults } from "./daily-results";
 import { collector, name, gapText } from "./stapipstics-extra-types";
@@ -5,7 +6,7 @@ export function timingFacts(summary: DayResults) {
   const { facts, add } = collector(["photo", "plot", "steady", "long-short", "majority"]);
   if (!summary.complete || summary.totalMs === null || !Number.isFinite(summary.totalMs))
     return facts;
-  const times = LEVELS.map((level) => ({ level, time: summary.records[level]!.first }));
+  const times = LEVELS.map((level) => ({ level, time: scoredFirstMs(summary.records[level]!) }));
   const pairs = times.flatMap((a, i) =>
     times.slice(i + 1).map((b) => ({ a, b, gap: Math.abs(a.time - b.time) })),
   );

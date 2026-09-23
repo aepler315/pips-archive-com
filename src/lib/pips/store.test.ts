@@ -9,6 +9,7 @@ import {
   saveProgress,
   recordSolve,
 } from "./store.ts";
+import type { AssistanceSnapshot, HintReceipt } from "./hints.ts";
 
 class MemoryStorage {
   private data = new Map<string, string>();
@@ -387,5 +388,108 @@ test("different puzzle dates cannot combine into a third-completion transition",
     await recordSolve("2026-09-18", "easy", 1);
     await recordSolve("2026-09-19", "medium", 2);
     assert.equal((await recordSolve("2026-09-19", "hard", 3)).completedDay, false);
+  });
+});
+
+const hintReceipts: HintReceipt[] = [
+  {
+    idempotencyKey: "offer-a:1",
+    offerId: "offer-a",
+    unlockedTier: 1,
+    chargedMs: 15_000,
+    policyVersion: 1,
+  },
+  {
+    idempotencyKey: "offer-a:3",
+    offerId: "offer-a",
+    unlockedTier: 3,
+    chargedMs: 225_000,
+    policyVersion: 1,
+  },
+];
+const assistance: AssistanceSnapshot = {
+  policyVersion: 1,
+  penaltyMs: 240_000,
+  receipts: hintReceipts,
+  moves: [{ offerId: "offer-a", highestTier: 3 }],
+};
+
+test("assisted first solves keep their snapshot and stay out of performance analytics", async () => {
+  await withStorage(async (s) => {
+    const res = await recordSolve("2026-09-19", "hard", 90_000, "b".repeat(64), assistance);
+    assert.equal(res.status, "created");
+    assert.equal(res.result?.first, 90_000, "the raw clock is still the first time");
+    assert.deepEqual(res.result?.assistance, assistance);
+    assert.deepEqual(allResults()[0].assistance, assistance);
+    const analytics = s.getItem("pips-archive:v1:analytics");
+    assert.ok(analytics === null || !analytics.includes("2026-09-19"));
+  });
+});
+
+test("unassisted solves are stored without an assistance field", async () => {
+  await withStorage(async (s) => {
+    await recordSolve("2026-09-19", "easy", 60_000, undefined, null);
+    const stored = JSON.parse(s.getItem("pips-archive:v1:result:2026-09-19:easy")!);
+    assert.equal("assistance" in stored, false);
+  });
+});
+
+test("a damaged assistance record makes the result corrupt instead of unassisted", async () => {
+  await withStorage(async (s) => {
+    const k = "pips-archive:v1:result:2026-09-19:easy";
+    s.setItem(k, JSON.stringify({ ...validResult, assistance: { ...assistance, penaltyMs: 1 } }));
+    assert.deepEqual(allResults(), []);
+    assert.deepEqual(await recordSolve("2026-09-19", "easy", 5), {
+      status: "failed",
+      result: null,
+      completedDay: false,
+      reason: "corrupt",
+    });
+    const forged = { ...assistance, receipts: [assistance.receipts[1]] };
+    assert.equal((await recordSolve("2026-09-18", "easy", 5, undefined, forged)).status, "failed");
+  });
+});
+
+test("hint receipts ride along with unfinished progress, exports and imports", () => {
+  return withStorage(async (s) => {
+    const offer = {
+      id: "",
+      puzzleHash: "c".repeat(64),
+      boardFingerprint: "",
+      highestTier: 1 as const,
+      target: {
+        pips: [1, 2] as [number, number],
+        cells: [
+          [0, 0],
+          [0, 1],
+        ] as [[number, number], [number, number]],
+        firstPip: 1,
+        regionId: 0,
+        regionCells: [[0, 0]] as [number, number][],
+      },
+    };
+    const { offerIdFor } = await import("./hints.ts");
+    offer.id = offerIdFor(offer.puzzleHash, offer.boardFingerprint, offer.target);
+    const receipts = [{ ...hintReceipts[0], offerId: offer.id, idempotencyKey: `${offer.id}:1` }];
+    saveProgress("2026-09-11", "easy", [null], 5_000, { receipts, offers: [offer] });
+    assert.deepEqual(getProgress("2026-09-11", "easy"), {
+      state: [null],
+      elapsed: 5_000,
+      receipts,
+      offers: [offer],
+    });
+    const backup = exportAll();
+    s.removeItem("pips-archive:v1:progress:2026-09-11:easy");
+    assert.equal((await importAll(backup)).progress, 1);
+    assert.deepEqual(getProgress("2026-09-11", "easy")?.receipts, receipts);
+    s.setItem(
+      "pips-archive:v1:progress:2026-09-11:easy",
+      JSON.stringify({
+        state: [null],
+        elapsed: 5_000,
+        receipts: [{ ...receipts[0], chargedMs: 1 }],
+      }),
+    );
+    assert.equal(getProgress("2026-09-11", "easy"), null);
   });
 });

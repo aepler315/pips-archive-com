@@ -1,10 +1,13 @@
 import {
   evaluate,
   hardViolated,
+  key,
+  occupancy,
   parsePuzzle,
   place,
   remainderTileable,
   validPlacements,
+  type Cell,
   type GameState,
   type Puzzle,
 } from "./engine";
@@ -12,8 +15,8 @@ import {
   boardFingerprint,
   buildOffer,
   buildTargetMove,
-  canonicalPips,
   matchingUnusedTiles,
+  orientedPlacement,
   pipsKey,
   witnessIsCompatible,
   type HintOffer,
@@ -41,7 +44,8 @@ export function findCompletion(
 ): SearchOutcome {
   if (state.length !== puzzle.dominoes.length) return { status: "unknown", reason: "invalid" };
   if (evaluate(puzzle, state).solved) return { status: "found", witness: state };
-  if (hardViolated(puzzle, state) || !remainderTileable(puzzle, state)) return { status: "impossible" };
+  if (hardViolated(puzzle, state) || !remainderTileable(puzzle, state))
+    return { status: "impossible" };
 
   const nodeBudget = limits.nodeBudget ?? DEFAULT_LIMITS.nodeBudget;
   const deadlineMs = limits.deadlineMs ?? DEFAULT_LIMITS.deadlineMs;
@@ -50,9 +54,7 @@ export function findCompletion(
   let expanded = 0;
   let unknown: SearchOutcome | null = null;
 
-  const open = state
-    .map((placement, d) => (placement ? -1 : d))
-    .filter((d) => d >= 0);
+  const open = state.map((placement, d) => (placement ? -1 : d)).filter((d) => d >= 0);
 
   const visit = (current: GameState, remaining: number[]): GameState | null => {
     if (unknown) return null;
@@ -96,6 +98,40 @@ export function findCompletion(
   return { status: "impossible" };
 }
 
+/**
+ * Re-express a known solution as a completion of the player's board: every placed
+ * domino must sit on one solution domino's exact cells with the same pips, and the
+ * rest of the solution is dealt onto the player's unplaced dominoes of equal pips.
+ */
+export function alignWitness(
+  puzzle: Puzzle,
+  state: GameState,
+  solution: [Cell, Cell][] | undefined,
+): GameState | null {
+  if (!solution || solution.length !== puzzle.dominoes.length) return null;
+  if (state.length !== puzzle.dominoes.length) return null;
+  const occ = occupancy(puzzle, state);
+  const next = state.slice();
+  const unplaced = state.flatMap((placement, d) => (placement ? [] : [d]));
+  for (let i = 0; i < solution.length; i++) {
+    const cells = solution[i];
+    const [first, second] = puzzle.dominoes[i];
+    const a = occ.get(key(...cells[0]));
+    const b = occ.get(key(...cells[1]));
+    if (a || b) {
+      if (!a || !b || a.d !== b.d || a.pip !== first || b.pip !== second) return null;
+      continue;
+    }
+    const at = unplaced.findIndex((d) => pipsKey(puzzle.dominoes[d]) === pipsKey([first, second]));
+    if (at < 0) return null;
+    const d = unplaced.splice(at, 1)[0];
+    const oriented = orientedPlacement(puzzle.dominoes[d], cells, first);
+    if (!oriented) return null;
+    next[d] = { cells: oriented };
+  }
+  return !unplaced.length && evaluate(puzzle, next).solved ? next : null;
+}
+
 function targetFromWitness(puzzle: Puzzle, state: GameState, witness: GameState) {
   const candidates: NonNullable<ReturnType<typeof buildTargetMove>>[] = [];
   for (let d = 0; d < state.length; d++) {
@@ -135,10 +171,20 @@ export function searchHint(
   state: GameState,
   puzzleHash: string,
   limits: HintSearchLimits = {},
+  solution?: [Cell, Cell][],
 ): HintSearchResponse {
-  const found = findCompletion(puzzle, state, limits);
+  // The published solution answers instantly whenever the board still agrees with
+  // it; the bounded search only has to cover boards that took another road.
+  const known = alignWitness(puzzle, state, solution);
+  const found: SearchOutcome = known
+    ? { status: "found", witness: known }
+    : findCompletion(puzzle, state, limits);
   if (found.status !== "found") {
-    return { id: "", status: found.status, reason: found.status === "unknown" ? found.reason : undefined };
+    return {
+      id: "",
+      status: found.status,
+      reason: found.status === "unknown" ? found.reason : undefined,
+    };
   }
   const offer = offerFromWitness(puzzle, state, found.witness, puzzleHash);
   if (!offer) {
@@ -154,10 +200,13 @@ export function handleHintSearchRequest(request: HintSearchRequest): HintSearchR
     if (request.state.length !== puzzle.dominoes.length) {
       return { id: request.id, status: "unknown", reason: "invalid" };
     }
-    const result = searchHint(puzzle, request.state, request.puzzleHash, {
-      nodeBudget: request.nodeBudget,
-      deadlineMs: request.deadlineMs,
-    });
+    const result = searchHint(
+      puzzle,
+      request.state,
+      request.puzzleHash,
+      { nodeBudget: request.nodeBudget, deadlineMs: request.deadlineMs },
+      request.raw.solution,
+    );
     if (result.status === "found") {
       if (result.offer.boardFingerprint !== boardFingerprint(puzzle, request.state)) {
         return { id: request.id, status: "unknown", reason: "invalid" };

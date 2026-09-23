@@ -12,6 +12,8 @@ export const HINT_POLICY_VERSION = 1 as const;
 export const HINT_SHEET_TITLE = "Need a pip?";
 export const HINT_UNAVAILABLE_MESSAGE = "No hint is available for this board right now.";
 export const HINT_NUDGE_MESSAGE = "Look at the outlined region.";
+export const HINT_IMPOSSIBLE_MESSAGE =
+  "This board can’t be finished as it stands. Undo or move a domino, then ask again.";
 
 export type HintTier = 1 | 2 | 3;
 export const HINT_TIERS: HintTier[] = [1, 2, 3];
@@ -99,7 +101,12 @@ export function upgradeChargeMs(from: 0 | HintTier, to: HintTier): number {
 }
 
 export function scoredResultMs(elapsedMs: number, penaltyMs: number): number {
-  if (!Number.isFinite(elapsedMs) || elapsedMs < 0 || !Number.isFinite(penaltyMs) || penaltyMs < 0) {
+  if (
+    !Number.isFinite(elapsedMs) ||
+    elapsedMs < 0 ||
+    !Number.isFinite(penaltyMs) ||
+    penaltyMs < 0
+  ) {
     throw new Error("Invalid duration");
   }
   return elapsedMs + penaltyMs;
@@ -154,6 +161,17 @@ export function assistancePenaltyMs(snapshot: AssistanceSnapshot | null | undefi
 
 export function isAssistedSnapshot(snapshot: AssistanceSnapshot | null | undefined): boolean {
   return assistancePenaltyMs(snapshot) > 0;
+}
+
+/** Share-text marker for a first result that used paid hints. */
+export const HINT_MARKER = "💡";
+
+/** The time a result is ranked and shown by: the raw clock plus any hint penalty. */
+export function scoredFirstMs(result: {
+  first: number;
+  assistance?: AssistanceSnapshot | null;
+}): number {
+  return result.first + assistancePenaltyMs(result.assistance);
 }
 
 export function resultsBreakdown(snapshot: AssistanceSnapshot | null | undefined): {
@@ -252,7 +270,8 @@ export function placementForOffer(
 
 export function offerStillApplies(puzzle: Puzzle, state: GameState, offer: HintOffer): boolean {
   const occ = occupancy(puzzle, state);
-  if (occ.has(key(...offer.target.cells[0])) || occ.has(key(...offer.target.cells[1]))) return false;
+  if (occ.has(key(...offer.target.cells[0])) || occ.has(key(...offer.target.cells[1])))
+    return false;
   if (!adjacent(offer.target.cells[0], offer.target.cells[1])) return false;
   if (
     !puzzle.cells.has(key(...offer.target.cells[0])) ||
