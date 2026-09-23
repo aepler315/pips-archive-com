@@ -15,7 +15,8 @@ import {
 // there (its client-only work never executes during a prerender pass).
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { RotateCw, TriangleAlert } from "lucide-react";
+import { Lightbulb, RotateCw, TriangleAlert } from "lucide-react";
+import { HintDialog, type HintView } from "@/components/hint-dialog";
 import { PipsBoard } from "@/components/pips-board";
 import { PlayClock } from "@/components/play-clock";
 import { createClock } from "@/lib/pips/clock";
@@ -40,6 +41,7 @@ import {
   key,
   legalNeighbors,
   parsePuzzle,
+  place,
   remainderTileable,
   remove,
   rotatePlaced,
@@ -58,6 +60,25 @@ import {
   recordSolve,
   saveProgress,
 } from "@/lib/pips/store";
+import {
+  HINT_NUDGE_MESSAGE,
+  applyReceipt,
+  boardFingerprint,
+  findPurchasedOffer,
+  freezeAssistance,
+  offerStillApplies,
+  penaltyFromReceipts,
+  placementForOffer,
+  planPurchase,
+  revealedHint,
+  scoredFirstMs,
+  type AssistanceSnapshot,
+  type HintReceipt,
+  type HintSearchResponse,
+  type HintTier,
+  type PurchasedOffer,
+} from "@/lib/pips/hints";
+import { requestHint } from "@/lib/pips/hint-client";
 import { cn } from "@/lib/utils";
 import { loadDay } from "@/lib/pips/days";
 import { boundsOf, puzzleCells } from "@/lib/pips/geometry";
@@ -213,6 +234,8 @@ function BoardControls({
   disabled,
   compact,
   resetDisabled,
+  onHint,
+  hintDisabled,
 }: {
   placed: number;
   total: number;
@@ -222,6 +245,8 @@ function BoardControls({
   disabled?: boolean;
   compact?: boolean;
   resetDisabled?: boolean;
+  onHint: () => void;
+  hintDisabled?: boolean;
 }) {
   return (
     <div className={cn(compact ? "mt-1" : "mt-4", "flex items-center justify-between")}>
@@ -229,6 +254,10 @@ function BoardControls({
         {placed} / {total} placed
       </span>
       <div className="flex items-center gap-1">
+        <Button variant="ghost" size="sm" onClick={onHint} disabled={hintDisabled || disabled}>
+          <Lightbulb className="size-4" aria-hidden="true" />
+          Hint
+        </Button>
         <Button variant="ghost" size="sm" onClick={onUndo} disabled={!canUndo || disabled}>
           Undo
         </Button>
@@ -352,6 +381,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const [sel, setSel] = useState<Sel>(null);
   const [anchor, setAnchor] = useState<Anchor | null>(null);
   const [solveMs, setSolveMs] = useState<number | null>(null);
+  const [solvePenaltyMs, setSolvePenaltyMs] = useState(0);
   const [solveDetail, setSolveDetail] = useState("");
   const { summary } = useDailyResults(date);
   const [dialogReason, setDialogReason] = useState<"automatic" | "manual" | null>(null);
@@ -360,7 +390,11 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const [saveBusy, setSaveBusy] = useState(false);
   const writeBusy = useRef(false);
   const alive = useRef(true);
-  const attempt = useRef<{ ms: number; generation: number } | null>(null);
+  const attempt = useRef<{
+    ms: number;
+    generation: number;
+    assistance: AssistanceSnapshot | null;
+  } | null>(null);
   const generation = useRef(0);
   const dateButtonRef = useRef<HTMLButtonElement>(null);
   const solvedResultsButtonRef = useRef<HTMLButtonElement>(null);
@@ -386,6 +420,14 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const puzzleRef = useRef(puzzle);
   puzzleRef.current = puzzle;
   const [fresh, setFresh] = useState<number | null>(null);
+  // Hints bought during this attempt. Receipts carry the penalty; offers remember
+  // what each board state already unlocked so revisiting it never charges twice.
+  const [receipts, setReceipts] = useState<HintReceipt[]>([]);
+  const [offers, setOffers] = useState<PurchasedOffer[]>([]);
+  const receiptsRef = useRef(receipts);
+  const offersRef = useRef(offers);
+  const [hintView, setHintView] = useState<HintView | null>(null);
+  const hintRequest = useRef(0);
   const anchorRef = useRef<Anchor | null>(null);
   stateRef.current = state;
   selRef.current = sel;
@@ -397,6 +439,13 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     selRef.current = s;
     setSel(s);
   }
+  function holdHints(nextReceipts: HintReceipt[], nextOffers: PurchasedOffer[]) {
+    receiptsRef.current = nextReceipts;
+    offersRef.current = nextOffers;
+    setReceipts(nextReceipts);
+    setOffers(nextOffers);
+  }
+  const heldHints = () => ({ receipts: receiptsRef.current, offers: offersRef.current });
 
   const ev = useMemo(() => evaluate(puzzle, state), [puzzle, state]);
   // The remaining empty cells can only ever be a dead end if no perfect
@@ -424,7 +473,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const safeSave = () => {
     if (solvedRef.current) return;
     if (!touchedRef.current && !stateRef.current.some(Boolean)) return;
-    setSaveFailed(!saveProgress(date, level, stateRef.current, nowElapsed()));
+    setSaveFailed(!saveProgress(date, level, stateRef.current, nowElapsed(), heldHints()));
   };
 
   useEffect(() => {
@@ -526,6 +575,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
       stateRef.current = p.state;
       setState(p.state);
       clock.restore(p.elapsed);
+      holdHints(p.receipts ?? [], p.offers ?? []);
     }
   }, [date, level, puzzle, clock]);
 
@@ -548,7 +598,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     if (!frozen || writeBusy.current) return;
     writeBusy.current = true;
     setSaveBusy(true);
-    const res = await recordSolve(date, level, frozen.ms, contentHash.current);
+    const res = await recordSolve(date, level, frozen.ms, contentHash.current, frozen.assistance);
     writeBusy.current = false;
     if (!alive.current || frozen.generation !== generation.current) return;
     setSaveBusy(false);
@@ -559,8 +609,10 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
           ? "Safe saving is unavailable in this browser. Keep this tab open and retry."
           : "This time has not been saved. Keep this tab open and retry."
         : res.status === "existing"
-          ? `Practice attempt. Recorded time: ${fmt(res.result.first)}. Replays do not change it.`
-          : "First solve recorded.",
+          ? `Practice attempt. Recorded time: ${fmt(scoredFirstMs(res.result))}. Replays do not change it.`
+          : res.result.assistance
+            ? `First solve recorded, including +${fmt(res.result.assistance.penaltyMs)} of hints.`
+            : "First solve recorded.",
     );
     if (res.status === "created" && res.completedDay) setAutoPending(true);
   }, [date, level]);
@@ -575,8 +627,12 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
       setSolvedFlag(true);
       holdSel(null);
       holdAnchor(null);
-      attempt.current = { ms, generation: generation.current };
+      const assistance = receiptsRef.current.length ? freezeAssistance(receiptsRef.current) : null;
+      attempt.current = { ms, generation: generation.current, assistance };
       setSolveMs(ms);
+      setSolvePenaltyMs(assistance?.penaltyMs ?? 0);
+      hintRequest.current++;
+      setHintView(null);
       setSolveDetail("Saving recorded time…");
       void saveAttempt();
     }
@@ -643,7 +699,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     stateRef.current = next;
     setState(next);
     if (!solvedRef.current && !evaluate(puzzleRef.current, next).solved)
-      setSaveFailed(!saveProgress(date, level, next, nowElapsed()));
+      setSaveFailed(!saveProgress(date, level, next, nowElapsed(), heldHints()));
   }
 
   function undo() {
@@ -831,6 +887,8 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
 
   function doReset() {
     if (writeBusy.current || (attempt.current && saveFailed)) return;
+    // Clearing a board mid-attempt keeps its hint penalty; a replay starts clean.
+    const replay = solvedRef.current;
     hasOpenedResults.current = false;
     generation.current++;
     attempt.current = null;
@@ -846,11 +904,91 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     holdAnchor(null);
     setFresh(null);
     setSolveMs(null);
-    clearProgress(date, level);
+    setSolvePenaltyMs(0);
+    if (replay) holdHints([], []);
+    if (receiptsRef.current.length)
+      setSaveFailed(!saveProgress(date, level, empty, nowElapsed(), heldHints()));
+    else clearProgress(date, level);
     historyRef.current = [];
     setCanUndo(false);
     startClock();
   }
+
+  const prior = summary?.records[level] ?? null;
+  // Replays never change the record, so their hints cost nothing.
+  const freeHints = prior !== null;
+  const penaltyMs = penaltyFromReceipts(receipts);
+
+  async function openHints() {
+    if (solvedRef.current || !summary) return;
+    const st = stateRef.current;
+    const fp = boardFingerprint(puzzle, st);
+    const request = ++hintRequest.current;
+    const bought = findPurchasedOffer(offersRef.current, fp);
+    if (bought && offerStillApplies(puzzle, st, bought)) {
+      setHintView({ status: "ready", offer: bought });
+      return;
+    }
+    setHintView({ status: "searching" });
+    let response: HintSearchResponse;
+    try {
+      const puzzleHash = contentHash.current ?? (await hashPuzzle(raw[level]));
+      response = await requestHint({ raw: raw[level], state: st, puzzleHash });
+    } catch {
+      response = { id: "", status: "unknown" };
+    }
+    if (!alive.current || request !== hintRequest.current) return;
+    if (response.status === "found" && boardFingerprint(puzzle, stateRef.current) === fp)
+      setHintView({ status: "ready", offer: response.offer });
+    else setHintView({ status: response.status === "impossible" ? "impossible" : "unavailable" });
+  }
+
+  function closeHints() {
+    hintRequest.current++;
+    setHintView(null);
+  }
+
+  function buyHint(tier: HintTier) {
+    if (hintView?.status !== "ready" || solvedRef.current) return;
+    const st = stateRef.current;
+    const plan = planPurchase(puzzle, st, hintView.offer, tier, receiptsRef.current);
+    if (plan.status === "downgrade") return;
+    if (plan.status === "stale") {
+      setHintView({ status: "unavailable" });
+      return;
+    }
+    let nextReceipts = receiptsRef.current;
+    if (plan.status === "charge" && !freeHints) {
+      const applied = applyReceipt(nextReceipts, plan.receipt);
+      if (!applied) {
+        setHintView({ status: "unavailable" });
+        return;
+      }
+      nextReceipts = applied;
+    }
+    const bought: PurchasedOffer = { ...plan.offer, highestTier: plan.tier };
+    holdHints(nextReceipts, [...offersRef.current.filter((o) => o.id !== bought.id), bought]);
+    closeHints();
+    clearSel();
+    const placement = tier === 3 ? placementForOffer(puzzle, st, bought) : null;
+    if (placement) {
+      afterMove(place(puzzle, st, placement.d, ...placement.cells));
+      setFresh(placement.d);
+    } else {
+      setSaveFailed(!saveProgress(date, level, st, nowElapsed(), heldHints()));
+    }
+  }
+
+  // A hint belongs to the exact board it was bought for; any move hides it and
+  // undoing back to that board shows it again at no charge.
+  const fingerprint = useMemo(() => boardFingerprint(puzzle, state), [puzzle, state]);
+  const shownHint = useMemo(() => {
+    if (solvedFlag) return null;
+    const offer = findPurchasedOffer(offers, fingerprint);
+    return offer && offerStillApplies(puzzle, state, offer)
+      ? { tier: offer.highestTier, ...revealedHint(offer, puzzle, state) }
+      : null;
+  }, [offers, fingerprint, puzzle, state, solvedFlag]);
 
   const verb = mousey ? "Click" : "Tap";
   const hint = solvedFlag
@@ -863,13 +1001,16 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
             ? `${verb} the other cell for this double.`
             : `${verb} a neighbouring cell to set the other half.`
           : `${verb} the cell this pip should sit on. Tab flips it.`
-        : fresh != null
-          ? "Select the placed domino to move, rotate, flip, or remove it."
-          : mousey
-            ? "Click a domino, or a placed one to move it."
-            : "Tap a domino, or a placed one to move it.";
+        : shownHint
+          ? shownHint.tier >= 2
+            ? "Place the highlighted domino in the outlined region."
+            : HINT_NUDGE_MESSAGE
+          : fresh != null
+            ? "Select the placed domino to move, rotate, flip, or remove it."
+            : mousey
+              ? "Click a domino, or a placed one to move it."
+              : "Tap a domino, or a placed one to move it.";
 
-  const prior = summary?.records[level] ?? null;
   const nextTarget = useMemo(
     () => nextPuzzleTarget(archive.puzzles, date, level),
     [archive, date, level],
@@ -887,6 +1028,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
         statuses={ev.regions}
         sel={sel}
         orientation={orientation}
+        hintRegion={shownHint?.regionCells}
         hold={sel?.kind === "tray" && !state[sel.d] ? sel.d : null}
         holdEnd={sel?.kind === "tray" ? sel.end : 0}
         pending={
@@ -955,7 +1097,11 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
             );
           })}
         </div>
-        <PlayClock clock={clock} stopped={solvedFlag || dialogReason !== null} />
+        <PlayClock
+          clock={clock}
+          stopped={solvedFlag || dialogReason !== null}
+          penaltyMs={solveMs !== null ? solvePenaltyMs : penaltyMs}
+        />
       </div>
 
       {saveFailed && solveMs === null ? (
@@ -975,7 +1121,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
         >
           <div>
             {saveFailed ? "Attempt time" : "Solved in"}{" "}
-            <strong className="text-xl tabular-nums">{fmt(solveMs)}</strong>{" "}
+            <strong className="text-xl tabular-nums">{fmt(solveMs + solvePenaltyMs)}</strong>{" "}
             <span>{solveDetail}</span>
           </div>
           <div className="flex items-center gap-2">
@@ -1012,7 +1158,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
         </div>
       ) : prior ? (
         <p className="mb-2 text-sm text-muted-foreground">
-          Recorded time: {fmt(prior.first)}. Replays do not change it.
+          Recorded time: {fmt(scoredFirstMs(prior))}. Replays do not change it. Hints are free.
         </p>
       ) : null}
 
@@ -1091,6 +1237,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
               placed={state.map(Boolean)}
               selected={sel?.kind === "tray" || sel?.kind === "board" ? sel.d : null}
               selectedEnd={sel?.kind === "tray" || sel?.kind === "board" ? sel.end : null}
+              hinted={shownHint?.tileIndex ?? null}
               disabled={solvedFlag}
               onPick={pick}
               side={sideTray}
@@ -1105,11 +1252,22 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
               disabled={solvedFlag}
               compact={!sideTray && !isMd}
               resetDisabled={saveBusy || (solveMs !== null && saveFailed)}
+              onHint={() => void openHints()}
+              hintDisabled={!summary}
             />
           </div>
         </div>
       </div>
 
+      {hintView ? (
+        <HintDialog
+          view={hintView}
+          free={freeHints}
+          penaltyMs={penaltyMs}
+          onBuy={buyHint}
+          onClose={closeHints}
+        />
+      ) : null}
       {summary && dialogReason ? (
         <DailyResultsDialog
           summary={summary}

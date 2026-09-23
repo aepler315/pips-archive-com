@@ -13,6 +13,12 @@ import {
   type DayResults,
 } from "../lib/pips/daily-results";
 import type { Stapipstic } from "../lib/pips/stapipstics";
+import {
+  HINT_MARKER,
+  assistancePenaltyMs,
+  isAssistedSnapshot,
+  scoredFirstMs,
+} from "../lib/pips/hints";
 
 import { buildPersistentMetrics, type PersistentMetrics } from "../lib/pips/result-metrics";
 
@@ -56,13 +62,21 @@ export function DailyResultsCard({
           >
             <span className="results-score-label">{level[0].toUpperCase() + level.slice(1)}</span>
             <strong>
-              {summary.records[level] ? formatResultDuration(summary.records[level].first) : "—"}
+              {summary.records[level]
+                ? formatResultDuration(scoredFirstMs(summary.records[level]))
+                : "—"}
             </strong>
             {!summary.records[level] ? (
               <span className="results-score-status">Not solved</span>
             ) : metrics[level].deltaMs !== null ? (
               <span className="results-score-status">
                 {formatResultDelta(metrics[level].deltaMs)} vs avg
+              </span>
+            ) : null}
+            {summary.records[level] && isAssistedSnapshot(summary.records[level].assistance) ? (
+              <span className="results-score-hints">
+                {HINT_MARKER} +
+                {formatResultDuration(assistancePenaltyMs(summary.records[level].assistance))} hints
               </span>
             ) : null}
           </section>

@@ -30,6 +30,8 @@ type Props = {
   holdEnd?: 0 | 1;
   pending?: { cell: Cell; pip: number } | null;
   orientation?: BoardOrientation;
+  /** Cells of the region a purchased hint points at. */
+  hintRegion?: Cell[] | null;
   onCell: (cell: Cell) => void;
   onBackground: () => void;
 };
@@ -266,6 +268,7 @@ export function PipsBoard({
   holdEnd = 0,
   pending,
   orientation = "natural",
+  hintRegion,
   onCell,
   onBackground,
 }: Props) {
@@ -277,6 +280,10 @@ export function PipsBoard({
     [puzzle],
   );
   const anchors = useMemo(() => puzzle.regions.map(badgeAnchor), [puzzle]);
+  const hintOutline = useMemo(
+    () => (hintRegion?.length ? unionPath(hintRegion, BOARD.radius, BOARD.inset) : null),
+    [hintRegion],
+  );
   const pad = 0.4;
   const vbX = b.minC - pad;
   const vbY = b.minR - pad;
@@ -452,6 +459,19 @@ export function PipsBoard({
             />
           );
         })}
+
+        {hintOutline ? (
+          <path
+            d={hintOutline}
+            className="hint-outline pointer-events-none"
+            fill="none"
+            strokeWidth={0.09}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <title>Hinted region</title>
+          </path>
+        ) : null}
 
         {ghost && ghostOcc ? (
           <Tile

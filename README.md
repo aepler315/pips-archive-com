@@ -12,6 +12,9 @@ No backend, no accounts — everything a visitor does lives in their browser's l
 - `src/lib/pips/engine.ts` – pure game logic (board, placement, snap, region evaluation, solve
   check). The type this whole app is built on; see its tests in `engine.test.ts`.
 - `src/lib/pips/store.ts` – the localStorage layer (`pips-archive:v1:` prefix).
+- `src/lib/pips/hints.ts` – hint pricing, receipts and the assistance snapshot frozen onto a first
+  result. `hint-search.ts` finds one verified next move (the published solution first, then a
+  bounded search); `hint-worker.ts` / `hint-client.ts` run it off the main thread.
 - `src/data/archive.json` – the initial archive index bundled into the client build. Open tabs revalidate
   `/data/index.json` on focus and while waiting for the next New York puzzle day. Kept in lockstep
   with `data/index.json` by `scripts/lib.mjs`'s `buildIndex()` — never hand-edited.
@@ -64,6 +67,12 @@ region's **sum** to `target`), `equals`, `unequal`, `empty` (no constraint).
   tab is visible and stops on solve. Unfinished boards are saved and resume on return. The board
   draws each region as its own rounded polyomino — pastel fill, dashed outline, grout between
   neighbors, diamond badge on the inner corner — close to official Pips.
+- **Hints** – the Hint button offers Nudge (+00:15, outlines a region), Pick a domino (+01:00,
+  also highlights the tray domino) and Place a domino (+04:00, places it after a confirmation).
+  Upgrading one hint charges only the difference; separate hints add up. The clock keeps running.
+  A result's shown time is the raw clock plus the penalty (`Result.first` stays the raw clock and
+  `Result.assistance` holds the receipts); assisted solves are marked 💡 and never count toward the
+  performance score. Replays of a recorded puzzle get hints for free.
 - **Stats** (`/stats`) – per-level counts, best/median/mean, recent solves, export/import/erase.
 
 ## Deploy

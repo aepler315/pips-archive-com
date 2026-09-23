@@ -1,3 +1,4 @@
+import { scoredFirstMs } from "@/lib/pips/hints";
 import { useAllResults } from "@/lib/pips/use-daily-results";
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -320,7 +321,7 @@ function DayDialog({
                   >
                     <span className="font-medium">{l[0].toUpperCase() + l.slice(1)}</span>
                     <span className="flex items-center gap-1.5 text-sm tabular-nums">
-                      {r ? `Solved in ${fmt(r.first)}` : "Not solved"}
+                      {r ? `Solved in ${fmt(scoredFirstMs(r))}` : "Not solved"}
                       <ChevronsRight className="size-4" aria-hidden="true" />
                     </span>
                   </Link>

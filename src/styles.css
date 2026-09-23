@@ -93,6 +93,49 @@
   display: none;
 }
 
+/* Hints: a solid ring around the hinted region and domino, pulsing gently so it
+   reads as a pointer rather than a rule outline. */
+.hint-outline {
+  stroke: var(--color-foreground);
+  animation: hint-pulse 1.6s var(--ease-out) infinite alternate;
+}
+.hint-tile {
+  box-shadow: inset 0 0 0 2px var(--color-foreground);
+  animation: hint-pulse 1.6s var(--ease-out) infinite alternate;
+}
+@keyframes hint-pulse {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.45;
+  }
+}
+.hint-tier {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-background);
+}
+.hint-tier-owned {
+  background: var(--color-ok);
+}
+.hint-pips {
+  display: inline-flex;
+  gap: 3px;
+}
+.hint-pips i {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--color-foreground);
+}
+.hint-pips i.on {
+  background: var(--color-foreground);
+}
+
 /* Daily results: the card is the entire export surface; controls live outside it. */
 .results-date-trigger {
   min-height: 44px;
@@ -222,6 +265,13 @@
    Never both, so the three columns always stand the same height. */
 .results-score-status {
   margin-top: 2px;
+  width: 100%;
+  color: #7a7364;
+  font-size: 0.66rem;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+.results-score-hints {
   width: 100%;
   color: #7a7364;
   font-size: 0.66rem;
