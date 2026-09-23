@@ -1,3 +1,4 @@
+import { scoredFirstMs } from "./hints";
 import { LEVELS, type Level } from "./engine";
 import { buildDailyResults, validResultDate, type DayResults } from "./daily-results";
 import type { Result } from "./store";
@@ -32,12 +33,13 @@ export function buildPersistentMetrics(
     const metric = metrics[result.level];
     metric.count++;
     metric.averageMs =
-      (metric.averageMs ?? 0) + (result.first - (metric.averageMs ?? 0)) / metric.count;
+      (metric.averageMs ?? 0) + (scoredFirstMs(result) - (metric.averageMs ?? 0)) / metric.count;
   }
   for (const level of LEVELS) {
     const metric = metrics[level];
     const today = summary.records[level];
-    if (today && metric.averageMs !== null) metric.deltaMs = today.first - metric.averageMs;
+    if (today && metric.averageMs !== null)
+      metric.deltaMs = scoredFirstMs(today) - metric.averageMs;
   }
   return metrics;
 }

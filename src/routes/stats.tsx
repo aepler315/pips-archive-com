@@ -1,3 +1,4 @@
+import { HINT_MARKER, isAssistedSnapshot, scoredFirstMs } from "@/lib/pips/hints";
 import { PerformancePanel } from "@/components/performance-panel";
 import { useAllResults } from "@/lib/pips/use-daily-results";
 import { useRef, useState } from "react";
@@ -84,7 +85,7 @@ function StatsPage() {
         </thead>
         <tbody>
           {LEVELS.map((l) => {
-            const xs = res.filter((r) => r.level === l).map((r) => r.first);
+            const xs = res.filter((r) => r.level === l).map(scoredFirstMs);
             return (
               <tr key={l} className="border-t border-border">
                 <td className="py-2 capitalize">{l}</td>
@@ -128,7 +129,12 @@ function StatsPage() {
                     </Link>
                   </td>
                   <td className="py-2 capitalize">{r.level}</td>
-                  <td className="py-2 text-right">{fmt(r.first)}</td>
+                  <td className="py-2 text-right">
+                    {fmt(scoredFirstMs(r))}
+                    {isAssistedSnapshot(r.assistance) ? (
+                      <span title="Includes hint time"> {HINT_MARKER}</span>
+                    ) : null}
+                  </td>
                 </tr>
               ))
           )}

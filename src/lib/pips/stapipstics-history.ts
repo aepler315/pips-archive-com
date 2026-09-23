@@ -1,3 +1,4 @@
+import { scoredFirstMs } from "./hints";
 import { LEVELS } from "./engine";
 import { validResultDate, type DayResults } from "./daily-results";
 import { collector, mean, name, type ResultHistory } from "./stapipstics-extra-types";
@@ -24,9 +25,10 @@ export function historyFacts(summary: DayResults, history: ResultHistory) {
     })
     .sort((a, b) => b.date.localeCompare(a.date));
   const levels = LEVELS.map((level) => {
-    const values = prior.filter((r) => r.level === level).map((r) => r.first);
+    const values = prior.filter((r) => r.level === level).map(scoredFirstMs);
     const avg = mean(values);
-    const current = summary.records[level]?.first;
+    const record = summary.records[level];
+    const current = record ? scoredFirstMs(record) : undefined;
     const change =
       current !== undefined && values.length >= 5 && avg > 0 ? (current / avg - 1) * 100 : null;
     return { level, values, avg, current, change };

@@ -1,3 +1,4 @@
+import { scoredFirstMs } from "./hints";
 import { LEVELS, type RawDay } from "./engine";
 import { buildDailyResults, type DayResults } from "./daily-results";
 
@@ -164,7 +165,7 @@ export function getStapipsticCandidates(input: DayResults, raw: RawDay): Stapips
       "hard",
       "timing",
       "The Hard tax",
-      `${decimal((summary.records.hard!.first / total) * 100)}%`,
+      `${decimal((scoredFirstMs(summary.records.hard!) / total) * 100)}%`,
       "Hard’s share of your total solve time.",
     );
     const throughput = payload / (total / 60000);

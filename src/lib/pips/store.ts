@@ -6,6 +6,13 @@ import {
 } from "./performance-store";
 import { formatResultDuration } from "./daily-results";
 import { LEVELS, adjacent, key, type GameState, type Level, type Puzzle } from "./engine";
+import {
+  normalizeAssistance,
+  validateImportedProgressHints,
+  type AssistanceSnapshot,
+  type HintReceipt,
+  type PurchasedOffer,
+} from "./hints";
 
 const P = "pips-archive:v1:";
 
@@ -15,9 +22,13 @@ export type Result = {
   solvedAt: string;
   lastAt: string;
   plays: number;
+  /** Hints paid for during the first solve. Absent on unassisted and legacy results. */
+  assistance?: AssistanceSnapshot;
 };
 
-export type Progress = { state: GameState; elapsed: number };
+/** Hints bought during the unfinished attempt, kept so a reload cannot drop the penalty. */
+export type ProgressHints = { receipts: HintReceipt[]; offers: PurchasedOffer[] };
+export type Progress = { state: GameState; elapsed: number } & Partial<ProgressHints>;
 
 const storage = (): Storage | null => {
   if (typeof window === "undefined") return null;
@@ -64,8 +75,13 @@ export const progressKey = (date: string, level: Level) => `${P}progress:${date}
 export const getResult = (date: string, level: Level) =>
   normalizeResult(read(resultKey(date, level)));
 export function getProgress(date: string, level: Level, puzzle?: Puzzle): Progress | null {
-  const value = read<Progress>(progressKey(date, level));
-  if (!isValidProgress(value)) return null;
+  const raw = read<Progress>(progressKey(date, level));
+  if (!isValidProgress(raw)) return null;
+  const value: Progress = {
+    state: raw.state,
+    elapsed: raw.elapsed,
+    ...progressHints(validateImportedProgressHints(raw) ?? undefined),
+  };
   if (
     puzzle &&
     (value.state.length !== puzzle.dominoes.length ||
@@ -77,8 +93,20 @@ export function getProgress(date: string, level: Level, puzzle?: Puzzle): Progre
   return value;
 }
 
-export function saveProgress(date: string, level: Level, state: GameState, elapsed: number) {
-  return write(progressKey(date, level), { state, elapsed });
+export function saveProgress(
+  date: string,
+  level: Level,
+  state: GameState,
+  elapsed: number,
+  hints?: ProgressHints,
+) {
+  return write(progressKey(date, level), { state, elapsed, ...progressHints(hints) });
+}
+
+function progressHints(hints: Partial<ProgressHints> | undefined): Partial<ProgressHints> {
+  return hints && (hints.receipts?.length || hints.offers?.length)
+    ? { receipts: hints.receipts ?? [], offers: hints.offers ?? [] }
+    : {};
 }
 export function clearProgress(date: string, level: Level) {
   remove(progressKey(date, level));
@@ -155,6 +183,7 @@ export async function recordSolve(
   level: Level,
   ms: number,
   puzzleHash?: string,
+  assistance?: AssistanceSnapshot | null,
 ): Promise<SolveWrite> {
   const failed = (reason: "storage" | "invalid" | "corrupt" | "locking"): SolveWrite => ({
     status: "failed",
@@ -163,6 +192,8 @@ export async function recordSolve(
     reason,
   });
   if (!parseKey(resultKey(date, level)) || !duration(ms)) return failed("invalid");
+  const assisted = assistance ? normalizeAssistance(assistance) : null;
+  if (assistance && !assisted) return failed("invalid");
   // Freeze the completion timestamp before waiting for another tab's write.
   const now = new Date().toISOString();
   try {
@@ -177,11 +208,15 @@ export async function recordSolve(
         (l) => inspectResult(resultKey(date, l)).kind === "existing",
       );
       const result: Result = { first: ms, best: ms, solvedAt: now, lastAt: now, plays: 1 };
+      if (assisted?.receipts.length) result.assistance = assisted;
       if (!write(resultKey(date, level), result)) return failed("storage");
       clearProgress(date, level);
+      // Assisted solves never enter the performance model, so they carry no context.
       saveAnalyticsUnderLock(
         allResults(),
-        puzzleHash ? { date, level, first: ms, solvedAt: now, puzzleHash } : undefined,
+        puzzleHash && !result.assistance
+          ? { date, level, first: ms, solvedAt: now, puzzleHash }
+          : undefined,
       );
       notifyResults();
       return { status: "created", result, completedDay };
@@ -261,12 +296,16 @@ function normalizeResult(v: unknown): Result | null {
     Date.parse(r.solvedAt) > Date.parse(r.lastAt)
   )
     return null;
+  // A damaged hint record must not quietly turn an assisted solve into a clean one.
+  const assistance = r.assistance === undefined ? null : normalizeAssistance(r.assistance);
+  if (r.assistance !== undefined && !assistance) return null;
   return {
     first: r.first,
     best: r.best,
     plays: r.plays,
     solvedAt: new Date(r.solvedAt).toISOString(),
     lastAt: new Date(r.lastAt).toISOString(),
+    ...(assistance?.receipts.length ? { assistance } : {}),
   };
 }
 
@@ -278,6 +317,7 @@ function isValidProgress(v: unknown): v is Progress {
   if (!v || typeof v !== "object") return false;
   const p = v as Progress;
   if (!duration(p.elapsed) || !Array.isArray(p.state)) return false;
+  if (!validateImportedProgressHints(p)) return false;
   const occupied = new Set<string>();
   return p.state.every((placement) => {
     if (placement === null) return true;
@@ -331,6 +371,7 @@ export async function importAll(text: string): Promise<ImportReport> {
         const value: Progress = {
           elapsed: v.elapsed,
           state: v.state.map((p) => (p ? { cells: p.cells } : null)),
+          ...progressHints(validateImportedProgressHints(v) ?? undefined),
         };
         if (write(k, value)) report.progress++;
         else report.failed++;

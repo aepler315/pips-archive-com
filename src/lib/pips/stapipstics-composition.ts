@@ -1,3 +1,4 @@
+import { scoredFirstMs } from "./hints";
 import { LEVELS, type RawDay } from "./engine";
 import { type DayResults } from "./daily-results";
 import { collector, name, gapText } from "./stapipstics-extra-types";
@@ -203,8 +204,10 @@ export function compositionFacts(summary: DayResults, raw: RawDay) {
       levels.slice(i + 1).map((b) => {
         const intersection = [...a.pairs].filter((p) => b.pairs.has(p)).length;
         const union = new Set([...a.pairs, ...b.pairs]).size;
-        const at = summary.records[a.level]?.first,
-          bt = summary.records[b.level]?.first;
+        const ar = summary.records[a.level],
+          br = summary.records[b.level];
+        const at = ar ? scoredFirstMs(ar) : undefined,
+          bt = br ? scoredFirstMs(br) : undefined;
         const gap = at !== undefined && bt !== undefined ? Math.abs(at - bt) : 0;
         const difference =
           at !== undefined && bt !== undefined && Math.max(at, bt) > 0 ? gap / Math.max(at, bt) : 0;

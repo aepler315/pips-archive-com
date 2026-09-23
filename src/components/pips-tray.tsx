@@ -58,6 +58,8 @@ type Props = {
   placed: boolean[];
   selected: number | null;
   selectedEnd?: 0 | 1 | null;
+  /** The domino a purchased hint points at. */
+  hinted?: number | null;
   disabled?: boolean;
   onPick: (d: number, end: 0 | 1) => void;
   /** Two-column bank on the right of a tall board. */
@@ -71,6 +73,7 @@ export function PipsTray({
   placed,
   selected,
   selectedEnd,
+  hinted,
   disabled,
   onPick,
   side,
@@ -125,6 +128,8 @@ export function PipsTray({
       {order.map((d) => {
         const [a, b] = dominoes[d];
         const isSel = selected === d;
+        const isHint = hinted === d;
+        const hintLabel = isHint ? ", hinted" : "";
         return (
           <div
             key={d}
@@ -133,12 +138,13 @@ export function PipsTray({
               "relative min-h-[2.75rem] rounded-[var(--radius-md)] p-1.5",
               rail && "snap-start",
               isSel && "bg-muted",
+              isHint && "hint-tile",
             )}
           >
             <MiniTile a={a} b={b} end={isSel ? (selectedEnd ?? null) : null} />
             <button
               type="button"
-              aria-label={`Domino ${a}-${b}, ${a} pip`}
+              aria-label={`Domino ${a}-${b}, ${a} pip${hintLabel}`}
               aria-pressed={isSel && selectedEnd === 0}
               disabled={disabled}
               onClick={() => onPick(d, 0)}
@@ -148,7 +154,7 @@ export function PipsTray({
             />
             <button
               type="button"
-              aria-label={`Domino ${a}-${b}, ${b} pip`}
+              aria-label={`Domino ${a}-${b}, ${b} pip${hintLabel}`}
               aria-pressed={isSel && selectedEnd === 1}
               disabled={disabled}
               onClick={() => onPick(d, 1)}
