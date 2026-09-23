@@ -572,19 +572,22 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     if (!resumed) return;
     stateRef.current = resumed.state;
     setState(resumed.state);
-    if (progress) holdHints(progress.receipts ?? [], progress.offers ?? []);
+    // A saved board, including a finished one, resumes as play. The solve
+    // effect records it, or reports a practice attempt when a time exists.
+    if (progress?.state.some(Boolean)) {
+      holdHints(progress.receipts ?? [], progress.offers ?? []);
+      clock.restore(progress.elapsed);
+      return;
+    }
+    // No saved arrangement: show the published solution and the recorded time,
+    // without starting another solve.
     if (resumed.reviewing && result) {
       solvedRef.current = true;
       hasOpenedResults.current = true;
       setSolvedFlag(true);
-      setSolveMs(result.first);
-      setSolvePenaltyMs(result.assistance?.penaltyMs ?? 0);
-      setSolveDetail("");
       clock.stop(performance.now());
       clock.restore(result.first);
-      return;
     }
-    if (progress) clock.restore(progress.elapsed);
   }, [date, level, puzzle, clock]);
 
   const solvedBannerRef = useRef<HTMLDivElement>(null);
