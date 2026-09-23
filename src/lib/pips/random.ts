@@ -16,14 +16,15 @@ export function pickRandomUnsolved(
   exclude?: { date: string; level: Level },
 ): [string, Level] | null {
   if (!puzzles.length) return null;
-  const start = Math.floor(Math.random() * puzzles.length);
-  for (let i = 0; i < puzzles.length; i++) {
-    const p = puzzles[(start + i) % puzzles.length];
-    const open = LEVELS.filter((l) => {
-      if (exclude && p.date === exclude.date && l === exclude.level) return false;
-      return !results.has(resultKeyOf(p.date, l));
+  // Stay on easy until every easy is done, then medium, then hard.
+  // A day whose current tier is already solved is not a candidate.
+  for (const level of LEVELS) {
+    const open = puzzles.filter((p) => {
+      if (exclude && p.date === exclude.date && level === exclude.level) return false;
+      return !results.has(resultKeyOf(p.date, level));
     });
-    if (open.length) return [p.date, open[Math.floor(Math.random() * open.length)]];
+    if (!open.length) continue;
+    return [open[Math.floor(Math.random() * open.length)].date, level];
   }
   return null;
 }

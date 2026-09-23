@@ -29,6 +29,43 @@ test("pickRandomUnsolved skips a solved level and the excluded current puzzle", 
   assert.deepEqual(pick, ["2026-09-01", "hard"]);
 });
 
+test("pickRandomUnsolved stays on an unfinished easy", () => {
+  const puzzles = [stub("2026-09-01"), stub("2026-09-02")];
+  const results = new Map([[resultKeyOf("2026-09-01", "easy"), {}]]);
+  assert.deepEqual(pickRandomUnsolved(puzzles, results), ["2026-09-02", "easy"]);
+});
+
+test("pickRandomUnsolved skips the current easy and still avoids medium", () => {
+  const puzzles = [stub("2026-09-01"), stub("2026-09-02")];
+  const pick = pickRandomUnsolved(puzzles, new Map(), {
+    date: "2026-09-01",
+    level: "easy",
+  });
+  assert.deepEqual(pick, ["2026-09-02", "easy"]);
+});
+
+test("pickRandomUnsolved moves to unfinished mediums only after every easy", () => {
+  const puzzles = [stub("2026-09-01"), stub("2026-09-02")];
+  const results = new Map([
+    [resultKeyOf("2026-09-01", "easy"), {}],
+    [resultKeyOf("2026-09-02", "easy"), {}],
+    [resultKeyOf("2026-09-01", "medium"), {}],
+  ]);
+  assert.deepEqual(pickRandomUnsolved(puzzles, results), ["2026-09-02", "medium"]);
+});
+
+test("pickRandomUnsolved moves to unfinished hards only after every medium", () => {
+  const puzzles = [stub("2026-09-01"), stub("2026-09-02")];
+  const results = new Map([
+    [resultKeyOf("2026-09-01", "easy"), {}],
+    [resultKeyOf("2026-09-02", "easy"), {}],
+    [resultKeyOf("2026-09-01", "medium"), {}],
+    [resultKeyOf("2026-09-02", "medium"), {}],
+    [resultKeyOf("2026-09-02", "hard"), {}],
+  ]);
+  assert.deepEqual(pickRandomUnsolved(puzzles, results), ["2026-09-01", "hard"]);
+});
+
 test("pickRandomUnsolved returns null when the only open level is excluded", () => {
   const puzzles = [stub("2026-09-01")];
   const results = new Map([

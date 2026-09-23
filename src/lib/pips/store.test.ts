@@ -275,6 +275,24 @@ test("restored progress must fit the actual puzzle, including its domino count",
   });
 });
 
+test("recording a solve keeps the finished board", async () => {
+  await withStorage(async () => {
+    const board = [
+      {
+        cells: [
+          [0, 0],
+          [0, 1],
+        ] as [[number, number], [number, number]],
+      },
+    ];
+    saveProgress("2026-09-19", "easy", board, 120000);
+    assert.equal((await recordSolve("2026-09-19", "easy", 120000)).status, "created");
+    assert.deepEqual(getProgress("2026-09-19", "easy")?.state, board);
+    assert.equal((await recordSolve("2026-09-19", "easy", 60000)).status, "existing");
+    assert.deepEqual(getProgress("2026-09-19", "easy")?.state, board);
+  });
+});
+
 test("first completion is immutable across faster, slower and duplicate callbacks", async () => {
   await withStorage(async (s) => {
     const first = await recordSolve("2026-09-19", "easy", 120000);
