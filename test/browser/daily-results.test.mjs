@@ -59,7 +59,7 @@ for (const engine of engines) {
         const easy = page.locator("table").first().locator("tbody tr").filter({ hasText: "easy" });
         assert.match(await easy.innerText(), /02:00/);
         assert.doesNotMatch(await easy.innerText(), /01:00/);
-        await page.goto(base);
+        await page.goto(`${base}/?month=${date.slice(0, 7)}`);
         await page.locator("button").filter({ hasText: /19/ }).first().click();
         await page.getByRole("dialog").waitFor();
         assert.match(await page.getByRole("dialog").innerText(), /Solved in 02:00/);

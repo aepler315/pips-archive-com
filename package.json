@@ -21,9 +21,22 @@
     "analyze": "node --import tsx scripts/analyze-puzzles.mjs",
     "index": "node scripts/build-index.mjs",
     "test:browser": "node --test test/browser/*.test.mjs",
-    "analyze:benchmark": "node --import tsx scripts/benchmark-analysis.mjs"
+    "analyze:benchmark": "node --import tsx scripts/benchmark-analysis.mjs",
+    "dev:android": "vite --config vite.mobile.config.ts",
+    "build:mobile": "node scripts/sync-public-data.mjs && vite build --config vite.mobile.config.ts",
+    "build:android": "npm run build:mobile && cap sync android",
+    "open:android": "cap open android",
+    "test:mobile": "npm run build:mobile && node --test test/mobile/*.test.mjs"
   },
   "dependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/clipboard": "8.0.1",
+    "@capacitor/core": "8.5.3",
+    "@capacitor/filesystem": "8.1.4",
+    "@capacitor/share": "8.0.3",
+    "@fontsource-variable/figtree": "5.3.0",
+    "@fontsource-variable/fraunces": "5.3.0",
     "@hookform/resolvers": "^5.7.0",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -73,6 +86,7 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "8.5.3",
     "@eslint/js": "^9.20.0",
     "@types/node": "^22.16.5",
     "@types/react": "^19.2.0",
