@@ -1,3 +1,5 @@
+import { exportFile } from "@/lib/mobile/export";
+import { isNativeApp } from "@/lib/mobile/platform";
 import { HINT_MARKER, isAssistedSnapshot, scoredFirstMs } from "@/lib/pips/hints";
 import { PerformancePanel } from "@/components/performance-panel";
 import { useAllResults } from "@/lib/pips/use-daily-results";
@@ -64,7 +66,7 @@ function StatsPage() {
       <SiteHeader current="stats" />
       <h1 className="font-display mt-8 text-[1.65rem] font-semibold tracking-tight">Your solves</h1>
       <p className="mt-1 mb-5 text-muted-foreground">
-        Stored only in this browser. Export to keep a copy or move it elsewhere.
+        Stored only on this device. Export to keep a copy or move it elsewhere.
       </p>
 
       <div className="mb-6 grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -132,7 +134,7 @@ function StatsPage() {
                   <td className="py-2 text-right">
                     {fmt(scoredFirstMs(r))}
                     {isAssistedSnapshot(r.assistance) ? (
-                      <span title="Includes hint time"> {HINT_MARKER}</span>
+                      <span title="Hints used (no time penalty)"> {HINT_MARKER}</span>
                     ) : null}
                   </td>
                 </tr>
@@ -145,23 +147,19 @@ function StatsPage() {
         <Button
           variant="secondary"
           onClick={() => {
-            const blob = new Blob([exportAll()], { type: "application/json" });
-            const url = URL.createObjectURL(blob);
-            const a = Object.assign(document.createElement("a"), {
-              href: url,
-              download: `pips-archive-${new Date().toISOString().slice(0, 10)}.json`,
-            });
-            // Firefox needs the anchor in the document to honor `download`,
-            // and revoking the URL synchronously can race the download —
-            // both silent failures with no error to notice. Keep the anchor
-            // around and delay the revoke instead.
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            setImportStatus(null);
+            void exportFile(
+              new Blob([exportAll()], { type: "application/json" }),
+              `pips-archive-${new Date().toISOString().slice(0, 10)}.json`,
+            ).catch(() =>
+              setImportStatus({
+                ok: false,
+                text: "Export was not completed. Your saved data is still on this device.",
+              }),
+            );
           }}
         >
-          Export
+          {isNativeApp() ? "Export / share backup" : "Export"}
         </Button>
         <Button variant="secondary" onClick={() => fileRef.current?.click()}>
           Import
