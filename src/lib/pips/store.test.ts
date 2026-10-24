@@ -432,7 +432,7 @@ const assistance: AssistanceSnapshot = {
   moves: [{ offerId: "offer-a", highestTier: 3 }],
 };
 
-test("assisted first solves keep their snapshot and stay out of performance analytics", async () => {
+test("historical assisted solves keep their snapshot and enter performance analytics", async () => {
   await withStorage(async (s) => {
     const res = await recordSolve("2026-09-19", "hard", 90_000, "b".repeat(64), assistance);
     assert.equal(res.status, "created");
@@ -440,7 +440,7 @@ test("assisted first solves keep their snapshot and stay out of performance anal
     assert.deepEqual(res.result?.assistance, assistance);
     assert.deepEqual(allResults()[0].assistance, assistance);
     const analytics = s.getItem("pips-archive:v1:analytics");
-    assert.ok(analytics === null || !analytics.includes("2026-09-19"));
+    assert.ok(analytics?.includes("2026-09-19"));
   });
 });
 
