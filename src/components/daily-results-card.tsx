@@ -13,12 +13,7 @@ import {
   type DayResults,
 } from "../lib/pips/daily-results";
 import type { Stapipstic } from "../lib/pips/stapipstics";
-import {
-  HINT_MARKER,
-  assistancePenaltyMs,
-  isAssistedSnapshot,
-  scoredFirstMs,
-} from "../lib/pips/hints";
+import { HINT_MARKER, isAssistedSnapshot, scoredFirstMs } from "../lib/pips/hints";
 
 import { buildPersistentMetrics, type PersistentMetrics } from "../lib/pips/result-metrics";
 
@@ -49,7 +44,15 @@ export function DailyResultsCard({
   return (
     <article className="daily-results-card" aria-label="Daily puzzle results">
       <header className="results-card-header">
-        <h2>{summary.complete ? <>Pips <em>complete</em>.</> : <>Pips in progress.</>}</h2>
+        <h2>
+          {summary.complete ? (
+            <>
+              Pips <em>complete</em>.
+            </>
+          ) : (
+            <>Pips in progress.</>
+          )}
+        </h2>
         <p className="results-date">{formatResultDate(summary.date)}</p>
       </header>
       <div className="results-scores">
@@ -74,10 +77,7 @@ export function DailyResultsCard({
               </span>
             ) : null}
             {summary.records[level] && isAssistedSnapshot(summary.records[level].assistance) ? (
-              <span className="results-score-hints">
-                {HINT_MARKER} +
-                {formatResultDuration(assistancePenaltyMs(summary.records[level].assistance))} hints
-              </span>
+              <span className="results-score-hints">{HINT_MARKER} Hints used</span>
             ) : null}
           </section>
         ))}
