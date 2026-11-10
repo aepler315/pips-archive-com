@@ -18,8 +18,9 @@ export const HINT_IMPOSSIBLE_MESSAGE =
 export type HintTier = 1 | 2 | 3;
 export const HINT_TIERS: HintTier[] = [1, 2, 3];
 
-/** Millisecond prices: 15s / 60s / 240s. */
-export const HINT_PRICES_MS = { 1: 15_000, 2: 60_000, 3: 240_000 } as const;
+/** Only used to validate historical version-1 backups. Never charged in play. */
+const LEGACY_PRICES_MS = { 1: 15_000, 2: 60_000, 3: 240_000 } as const;
+export const HINT_PRICES_MS = { 1: 0, 2: 0, 3: 0 } as const;
 
 export const HINT_TIER_COPY: Record<
   HintTier,
@@ -28,19 +29,19 @@ export const HINT_TIER_COPY: Record<
   1: {
     name: "Nudge",
     description: "Highlight a useful region associated with one valid next move.",
-    priceLabel: "+00:15",
+    priceLabel: "Free",
     pips: 1,
   },
   2: {
     name: "Pick a domino",
     description: "Highlight a usable domino and its associated region.",
-    priceLabel: "+01:00",
+    priceLabel: "Free",
     pips: 2,
   },
   3: {
     name: "Place a domino",
     description: "Place that domino into its verified cells with the correct orientation.",
-    priceLabel: "+04:00",
+    priceLabel: "Free",
     pips: 3,
   },
 };
@@ -109,7 +110,7 @@ export function scoredResultMs(elapsedMs: number, penaltyMs: number): number {
   ) {
     throw new Error("Invalid duration");
   }
-  return elapsedMs + penaltyMs;
+  return elapsedMs;
 }
 
 export function formatHintDuration(ms: number): string {
@@ -166,12 +167,12 @@ export function isAssistedSnapshot(snapshot: AssistanceSnapshot | null | undefin
 /** Share-text marker for a first result that used paid hints. */
 export const HINT_MARKER = "💡";
 
-/** The time a result is ranked and shown by: the raw clock plus any hint penalty. */
+/** Raw active play time; historical assistance never changes scores. */
 export function scoredFirstMs(result: {
   first: number;
   assistance?: AssistanceSnapshot | null;
 }): number {
-  return result.first + assistancePenaltyMs(result.assistance);
+  return result.first;
 }
 
 export function resultsBreakdown(snapshot: AssistanceSnapshot | null | undefined): {
@@ -368,20 +369,7 @@ export function planPurchase(
   if (already || toTier === offer.highestTier) {
     return { status: "free", tier: toTier, chargedMs: 0, offer: { ...offer, highestTier: toTier } };
   }
-  const chargedMs = upgradeChargeMs(offer.highestTier, toTier);
-  return {
-    status: "charge",
-    tier: toTier,
-    chargedMs,
-    offer: { ...offer, highestTier: toTier },
-    receipt: {
-      idempotencyKey: keyForTier,
-      offerId: offer.id,
-      unlockedTier: toTier,
-      chargedMs,
-      policyVersion: HINT_POLICY_VERSION,
-    },
-  };
+  return { status: "free", tier: toTier, chargedMs: 0, offer: { ...offer, highestTier: toTier } };
 }
 
 export function applyReceipt(receipts: HintReceipt[], receipt: HintReceipt): HintReceipt[] | null {
@@ -405,7 +393,7 @@ export function isValidReceipt(value: unknown): value is HintReceipt {
     Number.isSafeInteger(receipt.chargedMs) &&
     receipt.chargedMs >= 0 &&
     receipt.idempotencyKey === receiptIdempotencyKey(receipt.offerId, receipt.unlockedTier) &&
-    receipt.chargedMs <= priceMs(receipt.unlockedTier)
+    receipt.chargedMs <= LEGACY_PRICES_MS[receipt.unlockedTier]
   );
 }
 
@@ -438,7 +426,7 @@ export function normalizeReceipts(value: unknown): HintReceipt[] | null {
   }
   for (const [offerId, charged] of chargedByOffer) {
     const top = highest.get(offerId);
-    if (!top || charged !== priceMs(top)) return null;
+    if (!top || charged !== LEGACY_PRICES_MS[top]) return null;
   }
   return receipts;
 }

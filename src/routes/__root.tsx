@@ -2,6 +2,7 @@ import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-r
 import appCss from "../styles.css?url";
 
 const APP_NAME = "Pips Archive";
+const native = import.meta.env.VITE_NATIVE_APP === "true";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -14,21 +15,31 @@ export const Route = createRootRoute({
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
       { rel: "stylesheet", href: appCss },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap",
-      },
+      ...(!native
+        ? [
+            {
+              rel: "stylesheet",
+              href: "https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap",
+            },
+          ]
+        : []),
     ],
   }),
-  component: () => (
-    <html lang="en" suppressHydrationWarning>
-      <head>
+  component: () =>
+    native ? (
+      <>
         <HeadContent />
-      </head>
-      <body>
         <Outlet />
-        <Scripts />
-      </body>
-    </html>
-  ),
+      </>
+    ) : (
+      <html lang="en" suppressHydrationWarning>
+        <head>
+          <HeadContent />
+        </head>
+        <body>
+          <Outlet />
+          <Scripts />
+        </body>
+      </html>
+    ),
 });

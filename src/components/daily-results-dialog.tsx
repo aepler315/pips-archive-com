@@ -1,3 +1,5 @@
+import { copyText } from "@/lib/mobile/export";
+import { isNativeApp } from "@/lib/mobile/platform";
 import { loadDayAnalysis, type DayAnalysis } from "@/lib/pips/puzzle-analysis";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Copy, Download, Send, Share2 } from "lucide-react";
@@ -99,7 +101,7 @@ export function DailyResultsDialog({
     setNotice("");
     setCopyError(false);
     try {
-      await copyDailyResults(text, navigator.clipboard);
+      await copyDailyResults(text, { writeText: copyText });
       setNotice("Results copied to clipboard.");
     } catch {
       setCopyError(true);
@@ -111,7 +113,9 @@ export function DailyResultsDialog({
     setImageStatus("busy");
     try {
       const blob = await renderedCard();
-      setNotice(await sendToShelfDrop(`pips-${summary.date}.png`, new Uint8Array(await blob.arrayBuffer())));
+      setNotice(
+        await sendToShelfDrop(`pips-${summary.date}.png`, new Uint8Array(await blob.arrayBuffer())),
+      );
       setImageStatus("idle");
     } catch {
       setImageStatus("error");
@@ -122,7 +126,7 @@ export function DailyResultsDialog({
     setImageStatus("busy");
     try {
       const blob = await renderedCard();
-      saveResultsPng(blob, summary.date);
+      await saveResultsPng(blob, summary.date);
       setImageStatus("ready");
       setNotice("PNG ready");
     } catch {
@@ -172,7 +176,11 @@ export function DailyResultsDialog({
               disabled={imageStatus === "busy" || !history.ready}
             >
               <Download size={16} />
-              {imageStatus === "busy" ? "Generating…" : "Download PNG"}
+              {imageStatus === "busy"
+                ? "Generating…"
+                : isNativeApp()
+                  ? "Save or share PNG"
+                  : "Download PNG"}
             </Button>
             <div className="results-share" ref={shareRef}>
               <Button

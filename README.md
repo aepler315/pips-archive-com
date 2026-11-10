@@ -67,12 +67,11 @@ region's **sum** to `target`), `equals`, `unequal`, `empty` (no constraint).
   tab is visible and stops on solve. Unfinished boards are saved and resume on return. The board
   draws each region as its own rounded polyomino — pastel fill, dashed outline, grout between
   neighbors, diamond badge on the inner corner — close to official Pips.
-- **Hints** – the Hint button offers Nudge (+00:15, outlines a region), Pick a domino (+01:00,
-  also highlights the tray domino) and Place a domino (+04:00, places it after a confirmation).
-  Upgrading one hint charges only the difference; separate hints add up. The clock keeps running.
-  A result's shown time is the raw clock plus the penalty (`Result.first` stays the raw clock and
-  `Result.assistance` holds the receipts); assisted solves are marked 💡 and never count toward the
-  performance score. Replays of a recorded puzzle get hints for free.
+- **Hints** – all three levels (Nudge, Pick a domino, Place a domino) are free, including
+  on first solves. Upgrades add no time and hint usage never disqualifies a performance
+  score. The ordinary play clock keeps running. Historical receipt data remains importable,
+  but displayed times, totals, statistics and sharing use raw play time only.
+
 - **Stats** (`/stats`) – per-level counts, best/median/mean, recent solves, export/import/erase.
 
 ## Deploy
@@ -194,3 +193,7 @@ versus puzzle-selection confounding. It never writes coefficients or switches th
 active `level-anchor-v1` model automatically.
 
 Winning arrangements appears in its own section, separate from the three selected Stapipstics.
+
+## Android app
+
+See [Android build, installation and data transfer](docs/android.md) for the Capacitor app.

@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* The Android Vite root is mobile/; explicitly include the shared React source. */
+@source "./";
 
 @theme {
   --color-background: #efe6d6;

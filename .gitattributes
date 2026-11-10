@@ -1,0 +1,2 @@
+# Keep the Windows Gradle launcher portable without CR characters in Git diffs.
+*.bat text eol=crlf

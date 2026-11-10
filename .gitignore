@@ -12,3 +12,12 @@ public/data/
 
 # Browser verification screenshots
 /test-artifacts/
+
+# Android build outputs and private signing material
+android/.gradle/
+android/**/build/
+android/local.properties
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.*
+*.jks
+*.keystore
