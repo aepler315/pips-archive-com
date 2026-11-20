@@ -46,40 +46,48 @@ function firstOffer(state = emptyState(puzzle)): HintOffer {
   return (found as { offer: HintOffer }).offer;
 }
 
-/** Buy tiers in order on one offer, returning the receipts the play page would keep. */
+/** Historical version-1 records remain importable, but never affect new scores. */
 function buy(tiers: HintTier[], offer = firstOffer()): HintReceipt[] {
-  let receipts: HintReceipt[] = [];
-  let current = offer;
-  for (const tier of tiers) {
-    const plan = planPurchase(puzzle, emptyState(puzzle), current, tier, receipts);
-    assert.ok(plan.status === "charge" || plan.status === "free");
-    if (plan.status === "charge") receipts = applyReceipt(receipts, plan.receipt)!;
-    current = plan.offer;
-  }
-  return receipts;
+  const prices = { 1: 15_000, 2: 60_000, 3: 240_000 };
+  let previous = 0;
+  return tiers.map((tier) => {
+    const chargedMs = prices[tier] - previous;
+    previous = prices[tier];
+    return {
+      idempotencyKey: `${offer.id}:${tier}`,
+      offerId: offer.id,
+      unlockedTier: tier,
+      chargedMs,
+      policyVersion: 1,
+    };
+  });
 }
 
-test("upgrading one hint costs its highest tier once", () => {
-  assert.equal(upgradeChargeMs(0, 1), 15_000);
-  assert.equal(upgradeChargeMs(1, 2), 45_000);
-  assert.equal(upgradeChargeMs(2, 3), 180_000);
-  assert.equal(upgradeChargeMs(3, 2), 0);
-  assert.equal(visibleUpgradePrice(1, 3), "+03:45");
-  assert.equal(visibleUpgradePrice(2, 2), "Free");
-  const receipts = buy([1, 2, 3]);
-  assert.equal(freezeAssistance(receipts).penaltyMs, 240_000);
+test("every hint tier and upgrade is free on a first attempt", () => {
+  let offer = firstOffer();
+  for (const tier of [1, 2, 3] as const) {
+    assert.equal(upgradeChargeMs(offer.highestTier, tier), 0);
+    assert.equal(visibleUpgradePrice(offer.highestTier, tier), "Free");
+    const plan = planPurchase(puzzle, emptyState(puzzle), offer, tier);
+    assert.equal(plan.status, "free");
+    if (plan.status !== "free") return;
+    assert.equal(plan.chargedMs, 0);
+    assert.equal(plan.offer.highestTier, tier);
+    offer = plan.offer;
+  }
+  assert.deepEqual(validateImportedProgressHints({ receipts: [], offers: [offer] }), {
+    receipts: [],
+    offers: [offer],
+  });
 });
 
-test("repeat purchases are idempotent and downgrades are refused", () => {
+test("repeat hints are free and downgrades are refused", () => {
   const offer = firstOffer();
-  const receipts = buy([2], offer);
   const unlocked = { ...offer, highestTier: 2 as const };
-  assert.equal(planPurchase(puzzle, emptyState(puzzle), unlocked, 2, receipts).status, "free");
-  assert.equal(planPurchase(puzzle, emptyState(puzzle), unlocked, 1, receipts).status, "downgrade");
-  const plan = planPurchase(puzzle, emptyState(puzzle), offer, 2, []);
-  assert.equal(plan.status, "charge");
-  if (plan.status !== "charge") return;
-  assert.deepEqual(applyReceipt(receipts, plan.receipt), receipts);
+  assert.equal(planPurchase(puzzle, emptyState(puzzle), unlocked, 2).status, "free");
+  assert.equal(planPurchase(puzzle, emptyState(puzzle), unlocked, 1).status, "downgrade");
+  const receipts = buy([2], offer);
+  assert.deepEqual(applyReceipt(receipts, receipts[0]), receipts);
 });
 
 test("an offer goes stale once its target cells are taken", () => {
@@ -117,15 +125,15 @@ test("progress hints validate receipts against the offers they unlocked", () => 
   );
 });
 
-test("scored time adds the penalty; legacy results score their raw time", () => {
+test("legacy hint penalties never change recorded time", () => {
   const assistance = freezeAssistance(buy([1, 2]));
   assert.equal(scoredFirstMs({ first: 90_000 }), 90_000);
-  assert.equal(scoredFirstMs({ first: 90_000, assistance }), 150_000);
+  assert.equal(scoredFirstMs({ first: 90_000, assistance }), 90_000);
   assert.equal(isAssistedSnapshot(assistance), true);
   assert.equal(isAssistedSnapshot(undefined), false);
 });
 
-test("daily totals and share text use scored time and mark assisted levels", () => {
+test("daily totals and shared times ignore historical hint penalties", () => {
   const assistance = freezeAssistance(buy([3]));
   const base = {
     best: 0,
@@ -138,14 +146,14 @@ test("daily totals and share text use scored time and mark assisted levels", () 
     medium: { ...base, first: 100_000, best: 100_000, assistance },
     hard: { ...base, first: 200_000, best: 200_000 },
   });
-  assert.equal(summary.totalMs, 600_000);
+  assert.equal(summary.totalMs, 360_000);
   assert.equal(
     buildDailyShareText(summary),
-    "Pips 09/01/2026\nEasy: 01:00\nMedium: 05:40 💡\nHard: 03:20\npipsarchive.com",
+    "Pips 09/01/2026\nEasy: 01:00\nMedium: 01:40 💡\nHard: 03:20\npipsarchive.com",
   );
 });
 
-test("assisted first solves are never eligible for performance scoring", () => {
+test("hint-assisted first solves are eligible for performance scoring", () => {
   const record = {
     date: "2026-09-01",
     level: "easy" as const,
@@ -153,7 +161,7 @@ test("assisted first solves are never eligible for performance scoring", () => {
     solvedAt: "2026-09-01T00:00:00.000Z",
   };
   assert.equal(eligible(record), true);
-  assert.equal(eligible({ ...record, assistance: freezeAssistance(buy([1])) }), false);
+  assert.equal(eligible({ ...record, assistance: freezeAssistance(buy([1])) }), true);
 });
 
 test("search returns a witness-backed move whose placement keeps the board solvable", () => {

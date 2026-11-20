@@ -1,18 +1,11 @@
+import { isAppActive } from "@/lib/mobile/platform";
 import { useEffect, useState } from "react";
 import type { PlayClock as Clock } from "@/lib/pips/clock";
 import { fmt } from "@/lib/pips/store";
 import { cn } from "@/lib/utils";
 
-/** Keep clock ticks out of the board's render tree. Shows the scored time: play plus hints. */
-export function PlayClock({
-  clock,
-  stopped,
-  penaltyMs = 0,
-}: {
-  clock: Clock;
-  stopped: boolean;
-  penaltyMs?: number;
-}) {
+/** Keep clock ticks out of the board's render tree. Shows active play time. */
+export function PlayClock({ clock, stopped }: { clock: Clock; stopped: boolean }) {
   const [ms, setMs] = useState(0);
   const [paused, setPaused] = useState(false);
   useEffect(() => {
@@ -21,9 +14,9 @@ export function PlayClock({
     const visibility = () => {
       clearInterval(timer);
       timer = undefined;
-      setPaused(document.hidden || stopped);
+      setPaused(document.hidden || !isAppActive() || stopped);
       update();
-      if (!document.hidden && !stopped) timer = setInterval(update, 1000);
+      if (!document.hidden && isAppActive() && !stopped) timer = setInterval(update, 1000);
     };
     visibility();
     document.addEventListener("visibilitychange", visibility);
@@ -42,13 +35,8 @@ export function PlayClock({
           paused && "text-muted-foreground",
         )}
       >
-        {fmt(ms + penaltyMs)}
+        {fmt(ms)}
       </div>
-      {penaltyMs > 0 ? (
-        <span className="-mt-0.5 text-[0.7rem] leading-none text-muted-foreground tabular-nums">
-          incl. +{fmt(penaltyMs)} hints
-        </span>
-      ) : null}
     </div>
   );
 }

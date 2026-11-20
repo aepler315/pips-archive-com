@@ -1,3 +1,4 @@
+import { isAppActive } from "@/lib/mobile/platform";
 import { hashPuzzle } from "@/lib/pips/puzzle-content";
 import { useDailyResults } from "@/lib/pips/use-daily-results";
 import { DailyResultsDialog } from "@/components/daily-results-dialog";
@@ -61,12 +62,10 @@ import {
 } from "@/lib/pips/store";
 import {
   HINT_NUDGE_MESSAGE,
-  applyReceipt,
   boardFingerprint,
   findPurchasedOffer,
   freezeAssistance,
   offerStillApplies,
-  penaltyFromReceipts,
   placementForOffer,
   planPurchase,
   revealedHint,
@@ -381,7 +380,6 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const [sel, setSel] = useState<Sel>(null);
   const [anchor, setAnchor] = useState<Anchor | null>(null);
   const [solveMs, setSolveMs] = useState<number | null>(null);
-  const [solvePenaltyMs, setSolvePenaltyMs] = useState(0);
   const [solveDetail, setSolveDetail] = useState("");
   const { summary } = useDailyResults(date);
   const [dialogReason, setDialogReason] = useState<"automatic" | "manual" | null>(null);
@@ -421,8 +419,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const puzzleRef = useRef(puzzle);
   puzzleRef.current = puzzle;
   const [fresh, setFresh] = useState<number | null>(null);
-  // Hints bought during this attempt. Receipts carry the penalty; offers remember
-  // what each board state already unlocked so revisiting it never charges twice.
+  // Preserve historical receipts for backup compatibility; new hints only unlock offers.
   const [receipts, setReceipts] = useState<HintReceipt[]>([]);
   const [offers, setOffers] = useState<PurchasedOffer[]>([]);
   const receiptsRef = useRef(receipts);
@@ -453,7 +450,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   const nowElapsed = () => clock.read(performance.now());
 
   const startClock = () => {
-    if (!document.hidden && !solvedRef.current && !dialogRef.current)
+    if (!document.hidden && isAppActive() && !solvedRef.current && !dialogRef.current)
       clock.start(performance.now());
   };
   const stopClock = () => clock.stop(performance.now());
@@ -473,7 +470,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   useEffect(() => {
     startClock();
     const vis = () => {
-      if (document.hidden) {
+      if (document.hidden || !isAppActive()) {
         stopClock();
         safeSave();
       } else {
@@ -568,17 +565,20 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     if (stateRef.current.some(Boolean) || solvedRef.current) return;
     const progress = getProgress(date, level, puzzle);
     const result = getResult(date, level);
+    // Empty-board hints and undo-to-empty attempts still carry real elapsed time.
+    // An existing result with an empty board retains the finished-board fallback below.
+    if (progress && (!result || progress.state.some(Boolean))) {
+      touchedRef.current = true;
+      holdHints(progress.receipts ?? [], progress.offers ?? []);
+      clock.restore(progress.elapsed);
+    }
     const resumed = resumeBoard(puzzle, progress?.state ?? null, result !== null);
     if (!resumed) return;
     stateRef.current = resumed.state;
     setState(resumed.state);
     // A saved board, including a finished one, resumes as play. The solve
     // effect records it, or reports a practice attempt when a time exists.
-    if (progress?.state.some(Boolean)) {
-      holdHints(progress.receipts ?? [], progress.offers ?? []);
-      clock.restore(progress.elapsed);
-      return;
-    }
+    if (progress?.state.some(Boolean)) return;
     // No saved arrangement: show the published solution and the recorded time,
     // without starting another solve.
     if (resumed.reviewing && result) {
@@ -620,9 +620,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
           : "This time has not been saved. Keep this tab open and retry."
         : res.status === "existing"
           ? `Practice attempt. Recorded time: ${fmt(scoredFirstMs(res.result))}. Replays do not change it.`
-          : res.result.assistance
-            ? `First solve recorded, including +${fmt(res.result.assistance.penaltyMs)} of hints.`
-            : "First solve recorded.",
+          : "First solve recorded.",
     );
     if (res.status === "created" && res.completedDay) setAutoPending(true);
   }, [date, level]);
@@ -640,7 +638,6 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
       const assistance = receiptsRef.current.length ? freezeAssistance(receiptsRef.current) : null;
       attempt.current = { ms, generation: generation.current, assistance };
       setSolveMs(ms);
-      setSolvePenaltyMs(assistance?.penaltyMs ?? 0);
       hintRequest.current++;
       setHintView(null);
       setSolveDetail("Saving recorded time…");
@@ -899,7 +896,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
 
   function doReset() {
     if (writeBusy.current || (attempt.current && saveFailed)) return;
-    // Clearing a board mid-attempt keeps its hint penalty; a replay starts clean.
+    // Clearing preserves unlocked hints and historical metadata; a replay starts clean.
     const replay = solvedRef.current;
     hasOpenedResults.current = false;
     generation.current++;
@@ -916,7 +913,6 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
     holdAnchor(null);
     setFresh(null);
     setSolveMs(null);
-    setSolvePenaltyMs(0);
     if (replay) holdHints([], []);
     if (receiptsRef.current.length)
       setSaveFailed(!saveProgress(date, level, empty, nowElapsed(), heldHints()));
@@ -927,9 +923,6 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
   }
 
   const prior = summary?.records[level] ?? null;
-  // Replays never change the record, so their hints cost nothing.
-  const freeHints = prior !== null;
-  const penaltyMs = penaltyFromReceipts(receipts);
 
   async function openHints() {
     if (solvedRef.current || !summary) return;
@@ -969,17 +962,12 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
       setHintView({ status: "unavailable" });
       return;
     }
-    let nextReceipts = receiptsRef.current;
-    if (plan.status === "charge" && !freeHints) {
-      const applied = applyReceipt(nextReceipts, plan.receipt);
-      if (!applied) {
-        setHintView({ status: "unavailable" });
-        return;
-      }
-      nextReceipts = applied;
-    }
+    touchedRef.current = true;
     const bought: PurchasedOffer = { ...plan.offer, highestTier: plan.tier };
-    holdHints(nextReceipts, [...offersRef.current.filter((o) => o.id !== bought.id), bought]);
+    holdHints(receiptsRef.current, [
+      ...offersRef.current.filter((o) => o.id !== bought.id),
+      bought,
+    ]);
     closeHints();
     clearSel();
     const placement = tier === 3 ? placementForOffer(puzzle, st, bought) : null;
@@ -1109,11 +1097,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
             );
           })}
         </div>
-        <PlayClock
-          clock={clock}
-          stopped={solvedFlag || dialogReason !== null}
-          penaltyMs={solveMs !== null ? solvePenaltyMs : penaltyMs}
-        />
+        <PlayClock clock={clock} stopped={solvedFlag || dialogReason !== null} />
       </div>
 
       {saveFailed && solveMs === null ? (
@@ -1133,7 +1117,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
         >
           <div>
             {saveFailed ? "Attempt time" : "Solved in"}{" "}
-            <strong className="text-xl tabular-nums">{fmt(solveMs + solvePenaltyMs)}</strong>{" "}
+            <strong className="text-xl tabular-nums">{fmt(solveMs)}</strong>{" "}
             <span>{solveDetail}</span>
           </div>
           <div className="flex items-center gap-2">
@@ -1261,15 +1245,7 @@ function Play({ date, level, raw }: { date: string; level: Level; raw: RawDay })
         </div>
       </div>
 
-      {hintView ? (
-        <HintDialog
-          view={hintView}
-          free={freeHints}
-          penaltyMs={penaltyMs}
-          onBuy={buyHint}
-          onClose={closeHints}
-        />
-      ) : null}
+      {hintView ? <HintDialog view={hintView} onBuy={buyHint} onClose={closeHints} /> : null}
       {summary && dialogReason ? (
         <DailyResultsDialog
           summary={summary}

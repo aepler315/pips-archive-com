@@ -22,11 +22,11 @@ export type Result = {
   solvedAt: string;
   lastAt: string;
   plays: number;
-  /** Hints paid for during the first solve. Absent on unassisted and legacy results. */
+  /** Historical hint metadata; retained for imports and never added to result times. */
   assistance?: AssistanceSnapshot;
 };
 
-/** Hints bought during the unfinished attempt, kept so a reload cannot drop the penalty. */
+/** Unlocked offers and any historical receipts survive progress saves and imports. */
 export type ProgressHints = { receipts: HintReceipt[]; offers: PurchasedOffer[] };
 export type Progress = { state: GameState; elapsed: number } & Partial<ProgressHints>;
 
@@ -209,10 +209,10 @@ export async function recordSolve(
       const result: Result = { first: ms, best: ms, solvedAt: now, lastAt: now, plays: 1 };
       if (assisted?.receipts.length) result.assistance = assisted;
       if (!write(resultKey(date, level), result)) return failed("storage");
-      // Assisted solves never enter the performance model, so they carry no context.
+      // Hint usage never disqualifies a first solve from performance analytics.
       saveAnalyticsUnderLock(
         allResults(),
-        puzzleHash && !result.assistance
+        puzzleHash
           ? { date, level, first: ms, solvedAt: now, puzzleHash }
           : undefined,
       );

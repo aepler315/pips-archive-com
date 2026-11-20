@@ -1,14 +1,12 @@
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
-import { fmt } from "@/lib/pips/store";
 import {
   HINT_IMPOSSIBLE_MESSAGE,
   HINT_SHEET_TITLE,
   HINT_TIERS,
   HINT_TIER_COPY,
   HINT_UNAVAILABLE_MESSAGE,
-  visibleUpgradePrice,
   type HintOffer,
   type HintTier,
 } from "@/lib/pips/hints";
@@ -32,15 +30,10 @@ function Pips({ count }: { count: number }) {
 
 export function HintDialog({
   view,
-  free,
-  penaltyMs,
   onBuy,
   onClose,
 }: {
   view: HintView;
-  /** Replays never change the record, so their hints cost nothing. */
-  free: boolean;
-  penaltyMs: number;
   onBuy: (tier: HintTier) => void;
   onClose: () => void;
 }) {
@@ -50,7 +43,7 @@ export function HintDialog({
   const unlocked = offer?.highestTier ?? 0;
   useEffect(() => setConfirmPlace(false), [offer?.id]);
 
-  const price = (tier: HintTier) => (free ? "Free" : visibleUpgradePrice(unlocked, tier));
+  const price = () => "Free";
 
   return (
     <Dialog
@@ -62,9 +55,8 @@ export function HintDialog({
       <DialogContent className="hint-dialog">
         <DialogTitle>{HINT_SHEET_TITLE}</DialogTitle>
         <DialogDescription>
-          {free
-            ? "This puzzle already has a recorded time, so hints are free on replays."
-            : "Each hint adds time to your result. Upgrading the same hint costs only the difference. The clock keeps running."}
+          All hints are free. Use any level of help without adding time or affecting your score. The
+          play clock keeps running.
         </DialogDescription>
 
         {view.status === "searching" ? (
@@ -110,7 +102,7 @@ export function HintDialog({
                 ) : confirming ? (
                   <div className="flex shrink-0 flex-col items-end gap-1">
                     <Button size="sm" onClick={() => onBuy(tier)}>
-                      Place · {price(tier)}
+                      Place · {price()}
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => setConfirmPlace(false)}>
                       Cancel
@@ -122,22 +114,16 @@ export function HintDialog({
                     size="sm"
                     className="shrink-0 tabular-nums"
                     disabled={!offer}
-                    aria-label={`${copy.name}, ${price(tier)}`}
+                    aria-label={`${copy.name}, ${price()}`}
                     onClick={() => (tier === 3 ? setConfirmPlace(true) : onBuy(tier))}
                   >
-                    {price(tier)}
+                    {price()}
                   </Button>
                 )}
               </li>
             );
           })}
         </ul>
-
-        {!free && penaltyMs > 0 ? (
-          <p className="mt-3 text-xs text-muted-foreground tabular-nums">
-            Hints so far: +{fmt(penaltyMs)}
-          </p>
-        ) : null}
       </DialogContent>
     </Dialog>
   );
